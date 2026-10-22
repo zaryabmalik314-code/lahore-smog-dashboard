@@ -1,106 +1,85 @@
 "use client";
 
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  Cell,
-} from "recharts";
 import type { Station } from "@/lib/types";
 
 interface PollutantBreakdownProps {
   stations: Station[];
 }
 
+function avg(stations: Station[], key: keyof Station): number {
+  const vals = stations.map(s => (s[key] as number) || 0);
+  return Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
+}
+
+const POLLUTANTS = [
+  { key: "pm25" as const, name: "PM2.5", limit: 15, unit: "ug/m3", who: "WHO 24hr", color: "#ef4444" },
+  { key: "pm10" as const, name: "PM10", limit: 45, unit: "ug/m3", who: "WHO 24hr", color: "#f97316" },
+  { key: "no2" as const, name: "NO2", limit: 25, unit: "ug/m3", who: "WHO annual", color: "#eab308" },
+  { key: "so2" as const, name: "SO2", limit: 40, unit: "ug/m3", who: "WHO 24hr", color: "#a855f7" },
+  { key: "co" as const, name: "CO", limit: 4, unit: "mg/m3", who: "WHO 24hr", color: "#06b6d4" },
+  { key: "o3" as const, name: "O3", limit: 100, unit: "ug/m3", who: "WHO 8hr", color: "#22c55e" },
+];
+
 export default function PollutantBreakdown({ stations }: PollutantBreakdownProps) {
-  const avgPollutants = [
-    {
-      name: "PM2.5",
-      value: Math.round(
-        stations.reduce((s, st) => s + (st.pm25 || 0), 0) / stations.length
-      ),
-      color: "#ef4444",
-      safe: 35,
-    },
-    {
-      name: "PM10",
-      value: Math.round(
-        stations.reduce((s, st) => s + (st.pm10 || 0), 0) / stations.length
-      ),
-      color: "#f97316",
-      safe: 150,
-    },
-    {
-      name: "NO2",
-      value: Math.round(
-        stations.reduce((s, st) => s + (st.no2 || 0), 0) / stations.length
-      ),
-      color: "#f59e0b",
-      safe: 53,
-    },
-    {
-      name: "SO2",
-      value: Math.round(
-        stations.reduce((s, st) => s + (st.so2 || 0), 0) / stations.length
-      ),
-      color: "#8b5cf6",
-      safe: 75,
-    },
-    {
-      name: "CO",
-      value: Math.round(
-        stations.reduce((s, st) => s + (st.co || 0), 0) / stations.length
-      ),
-      color: "#06b6d4",
-      safe: 50,
-    },
-    {
-      name: "O3",
-      value: Math.round(
-        stations.reduce((s, st) => s + (st.o3 || 0), 0) / stations.length
-      ),
-      color: "#10b981",
-      safe: 100,
-    },
-  ];
+  const maxVal = Math.max(...POLLUTANTS.map(p => avg(stations, p.key)), 1);
 
   return (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
-      <h3 className="text-sm font-medium text-zinc-300 mb-4">
-        Average Pollutant Levels
-      </h3>
-      <ResponsiveContainer width="100%" height={240}>
-        <BarChart data={avgPollutants} layout="vertical">
-          <CartesianGrid strokeDasharray="3 3" stroke="#27272a" horizontal={false} />
-          <XAxis type="number" stroke="#52525b" fontSize={11} tickLine={false} />
-          <YAxis
-            type="category"
-            dataKey="name"
-            stroke="#52525b"
-            fontSize={11}
-            tickLine={false}
-            width={50}
-          />
-          <Tooltip
-            contentStyle={{
-              backgroundColor: "#18181b",
-              border: "1px solid #27272a",
-              borderRadius: "8px",
-              fontSize: "12px",
-              color: "#f4f4f5",
-            }}
-          />
-          <Bar dataKey="value" radius={[0, 4, 4, 0]}>
-            {avgPollutants.map((entry, index) => (
-              <Cell key={index} fill={entry.color} />
-            ))}
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
+    <div className="glass rounded-2xl p-5">
+      <div className="flex items-center justify-between mb-5">
+        <h3 className="text-sm font-medium text-zinc-300">Pollutant Levels vs WHO Limits</h3>
+        <span className="text-[10px] text-zinc-600 uppercase tracking-wider">Network Avg</span>
+      </div>
+      <div className="space-y-4">
+        {POLLUTANTS.map((p) => {
+          const val = avg(stations, p.key);
+          const pct = Math.min((val / maxVal) * 100, 100);
+          const limitPct = Math.min((p.limit / maxVal) * 100, 100);
+          const exceeds = val > p.limit;
+
+          return (
+            <div key={p.key}>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-xs font-medium text-zinc-400">{p.name}</span>
+                <div className="flex items-center gap-2">
+                  <span className={`text-xs font-bold tabular-nums ${exceeds ? "text-red-400" : "text-zinc-300"}`}>
+                    {val}
+                  </span>
+                  <span className="text-[10px] text-zinc-600">{p.unit}</span>
+                  {exceeds && (
+                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 font-semibold">
+                      {Math.round(val / p.limit)}x
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="relative h-2 bg-zinc-800/50 rounded-full overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-all duration-700"
+                  style={{
+                    width: `${pct}%`,
+                    background: `linear-gradient(90deg, ${p.color}cc, ${p.color})`,
+                    boxShadow: exceeds ? `0 0 8px ${p.color}40` : "none",
+                  }}
+                />
+                <div
+                  className="absolute top-0 h-full w-px"
+                  style={{
+                    left: `${limitPct}%`,
+                    background: "#ffffff30",
+                  }}
+                  title={`WHO ${p.who}: ${p.limit} ${p.unit}`}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="flex items-center gap-4 mt-4 pt-3 border-t border-zinc-800/30">
+        <div className="flex items-center gap-1.5">
+          <div className="w-4 h-0.5 bg-white/20" />
+          <span className="text-[10px] text-zinc-600">WHO safe limit</span>
+        </div>
+      </div>
     </div>
   );
 }
