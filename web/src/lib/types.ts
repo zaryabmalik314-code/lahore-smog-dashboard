@@ -1,3 +1,5 @@
+export type SourceTier = "official" | "citizen" | "reference";
+
 export interface Station {
   id: string;
   name: string;
@@ -16,7 +18,21 @@ export interface Station {
   category: AQICategory;
   recorded_at: string;
   source: string;
+  attribution: string;
+  tier: SourceTier;
+  age_minutes: number;
+  stale: boolean;
 }
+
+export const SOURCE_TIER_LABELS: Record<SourceTier, string> = {
+  official: "Official",
+  citizen: "Citizen",
+  reference: "Reference",
+};
+
+// Readings older than this are excluded from aggregates — a station that stopped
+// reporting must not silently dilute the city average.
+export const STALE_AFTER_MINUTES = 360;
 
 export type AQICategory =
   | "good"
@@ -33,6 +49,20 @@ export interface DashboardData {
   city_avg_aqi: number;
   worst_station: Station | null;
   best_station: Station | null;
+  /** Stations whose readings are current enough to count toward the average. */
+  reporting_count: number;
+  /** Stations fetched but excluded from aggregates because their data is stale. */
+  excluded_count: number;
+  /** Pollutant keys at least one station actually reports. */
+  measured_pollutants: string[];
+  sources: { attribution: string; tier: SourceTier; station_count: number }[];
+}
+
+export interface TrendPoint {
+  time: string;
+  aqi: number;
+  /** How many stations contributed to this hourly average. */
+  samples: number;
 }
 
 export const AQI_COLORS: Record<AQICategory, string> = {

@@ -6,23 +6,10 @@ import AQICard from "./AQICard";
 import StationTable from "./StationTable";
 import AQITrend from "./AQITrend";
 import PollutantBreakdown from "./PollutantBreakdown";
-import type { DashboardData } from "@/lib/types";
-import { getAQICategory, AQI_COLORS, AQI_LABELS } from "@/lib/types";
+import type { DashboardData, SourceTier, TrendPoint } from "@/lib/types";
+import { getAQICategory, AQI_COLORS, AQI_LABELS, SOURCE_TIER_LABELS } from "@/lib/types";
 
 const AQIMap = dynamic(() => import("./AQIMap"), { ssr: false });
-
-function generateMockTrend(): { time: string; aqi: number }[] {
-  const points = [];
-  for (let i = 23; i >= 0; i--) {
-    const base = 160 + Math.sin(i / 3) * 40;
-    const noise = (i * 7 + 13) % 30 - 15;
-    points.push({
-      time: `${(24 - i) % 24}:00`,
-      aqi: Math.round(base + noise),
-    });
-  }
-  return points;
-}
 
 function getHealthAdvisory(aqi: number) {
   if (aqi > 300) return { level: "EMERGENCY", message: "Hazardous air quality. All outdoor activities must be suspended. Schools and offices should close. N95 masks mandatory outdoors.", action: "STAY INDOORS", color: "#dc2626" };
@@ -36,8 +23,9 @@ function getHealthAdvisory(aqi: number) {
 function getSmogAdvisories(data: DashboardData) {
   const advisories: { icon: string; title: string; detail: string; severity: "critical" | "warning" | "info" }[] = [];
   const avg = data.city_avg_aqi;
-  const worstPm25 = Math.max(...data.stations.map(s => s.pm25 || 0));
-  const borderStation = data.stations.find(s => s.name.toLowerCase().includes("wagha") || s.name.toLowerCase().includes("border"));
+  const reporting = data.stations.filter(s => !s.stale);
+  const worstPm25 = Math.max(...reporting.map(s => s.pm25 || 0), 0);
+  const borderStation = reporting.find(s => s.name.toLowerCase().includes("wagha") || s.name.toLowerCase().includes("border"));
 
   if (avg > 300) {
     advisories.push({ icon: "SCHOOL", title: "School Closure Advisory", detail: "AQI exceeds 300. Punjab govt protocol requires closure of all primary schools.", severity: "critical" });
@@ -46,11 +34,10 @@ function getSmogAdvisories(data: DashboardData) {
     advisories.push({ icon: "MASK", title: "N95 Mask Advisory", detail: `PM2.5 at ${worstPm25} ug/m3 — ${Math.round(worstPm25 / 15)}x WHO safe limit. N95 masks recommended for all outdoor activity.`, severity: "critical" });
   }
   if (borderStation && (borderStation.aqi || 0) > 200) {
-    advisories.push({ icon: "FIRE", title: "Cross-Border Pollution Detected", detail: `Wagha Border AQI at ${borderStation.aqi}. Likely crop burning contribution from across the border.`, severity: "warning" });
+    advisories.push({ icon: "BORDER", title: "Elevated Reading at Border Station", detail: `Wagha Border AQI at ${borderStation.aqi}. Source attribution requires satellite fire data and wind modelling.`, severity: "warning" });
   }
   if (avg > 150) {
-    advisories.push({ icon: "CAR", title: "Traffic Restriction Zone", detail: "AQI above 150. Odd-even vehicle policy and construction ban should be enforced in high-AQI zones.", severity: "warning" });
-    advisories.push({ icon: "CROP", title: "Agricultural Impact", detail: `Prolonged exposure above AQI 150 reduces crop yield by 10-30%. Current streak affecting wheat sowing season.`, severity: "warning" });
+    advisories.push({ icon: "CAR", title: "Traffic Restriction Threshold", detail: "Network AQI above 150 — the band at which odd-even and construction curbs are typically considered.", severity: "warning" });
   }
   if (avg > 100) {
     advisories.push({ icon: "HEALTH", title: "Hospital Alert", detail: "Respiratory OPD cases expected to surge. Healthcare facilities should prepare additional capacity.", severity: "info" });
@@ -70,19 +57,43 @@ export default function Dashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [activeTab, setActiveTab] = useState("overview");
   const [loading, setLoading] = useState(true);
-  const [trendData] = useState(() => generateMockTrend());
+  const [error, setError] = useState<string | null>(null);
+  const [trend, setTrend] = useState<{ points: TrendPoint[]; enabled: boolean }>({ points: [], enabled: false });
   const [time, setTime] = useState("");
 
   useEffect(() => {
-    fetch("/api/aqi")
-      .then((r) => r.json())
-      .then((d) => { setData(d); setLoading(false); })
-      .catch(() => setLoading(false));
+    const loadAqi = async () => {
+      try {
+        const res = await fetch("/api/aqi");
+        const body = await res.json();
+        if (!res.ok) {
+          setError(body.error || "Live data is unavailable.");
+          setData(null);
+        } else {
+          setError(null);
+          setData(body);
+        }
+      } catch {
+        setError("Could not reach the monitoring service.");
+      } finally {
+        setLoading(false);
+      }
+    };
 
-    const interval = setInterval(() => {
-      fetch("/api/aqi").then((r) => r.json()).then(setData);
-    }, 5 * 60 * 1000);
+    const loadTrend = async () => {
+      try {
+        const res = await fetch("/api/trend");
+        const body = await res.json();
+        setTrend({ points: body.points || [], enabled: Boolean(body.enabled) });
+      } catch {
+        setTrend({ points: [], enabled: false });
+      }
+    };
 
+    loadAqi();
+    loadTrend();
+
+    const interval = setInterval(() => { loadAqi(); loadTrend(); }, 5 * 60 * 1000);
     const clock = setInterval(() => {
       setTime(new Date().toLocaleTimeString("en-PK", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }));
     }, 1000);
@@ -99,10 +110,15 @@ export default function Dashboard() {
     );
   }
 
-  if (!data) {
+  if (error || !data) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-red-400">Failed to load data</div>
+      <div className="flex flex-col items-center justify-center min-h-screen gap-3 px-6 text-center">
+        <div className="w-10 h-10 rounded-full bg-red-500/10 border border-red-500/30 flex items-center justify-center text-red-400 font-bold">!</div>
+        <div className="text-zinc-200 text-sm font-medium">Live data unavailable</div>
+        <div className="text-zinc-500 text-xs max-w-sm leading-relaxed">
+          {error || "No monitoring data could be retrieved."} No readings are shown rather than
+          displaying values that cannot be verified.
+        </div>
       </div>
     );
   }
@@ -178,19 +194,42 @@ export default function Dashboard() {
 
       {/* Main Content */}
       <main className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6">
-        {activeTab === "overview" && <OverviewTab data={data} trendData={trendData} advisory={advisory} />}
+        {activeTab === "overview" && <OverviewTab data={data} trend={trend} advisory={advisory} />}
         {activeTab === "health" && <DepartmentTab type="health" data={data} />}
         {activeTab === "agriculture" && <DepartmentTab type="agriculture" data={data} />}
         {activeTab === "environment" && <DepartmentTab type="environment" data={data} />}
         {activeTab === "safecity" && <DepartmentTab type="safecity" data={data} />}
       </main>
 
-      {/* Footer */}
-      <footer className="border-t border-zinc-800/50 py-4 px-6 text-center">
-        <p className="text-[11px] text-zinc-600">
-          Data sourced from WAQI (World Air Quality Index) network. Readings update every 5 minutes.
-          Not for regulatory or emergency decision-making without verification.
-        </p>
+      {/* Footer — data provenance */}
+      <footer className="border-t border-zinc-800/50 py-5 px-6">
+        <div className="max-w-[1400px] mx-auto">
+          <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-2.5">Data Sources</p>
+          <div className="flex flex-wrap gap-x-5 gap-y-1.5 mb-3">
+            {data.sources.map((s) => (
+              <span key={s.attribution} className="text-[11px] text-zinc-400 flex items-center gap-1.5">
+                <TierDot tier={s.tier} />
+                {s.attribution}
+                <span className="text-zinc-600">
+                  ({s.station_count} station{s.station_count === 1 ? "" : "s"})
+                </span>
+              </span>
+            ))}
+          </div>
+          <p className="text-[11px] text-zinc-600 leading-relaxed">
+            Retrieved via the World Air Quality Index Project (waqi.info). Aggregates are computed
+            from {data.reporting_count} station{data.reporting_count === 1 ? "" : "s"} reporting
+            within the last 6 hours
+            {data.excluded_count > 0 && (
+              <>
+                ; {data.excluded_count} station{data.excluded_count === 1 ? " is" : "s are"} excluded
+                as not currently reporting
+              </>
+            )}
+            . Last retrieved {new Date(data.last_updated).toLocaleString("en-PK", { timeZone: "Asia/Karachi" })} PKT.
+            Readings are indicative and are not a substitute for accredited regulatory monitoring.
+          </p>
+        </div>
       </footer>
     </div>
   );
@@ -234,15 +273,33 @@ function AQIGauge({ value, size = 160 }: { value: number; size?: number }) {
   );
 }
 
-function OverviewTab({ data, trendData, advisory }: {
+function TierDot({ tier }: { tier: SourceTier }) {
+  const color = tier === "official" ? "#34d399" : tier === "citizen" ? "#60a5fa" : "#a1a1aa";
+  return (
+    <span
+      className="w-1.5 h-1.5 rounded-full shrink-0"
+      style={{ background: color }}
+      title={SOURCE_TIER_LABELS[tier]}
+    />
+  );
+}
+
+/** Mean over stations that actually report the field, not over all stations. */
+function meanOf(stations: { pm25: number | null }[]): number | null {
+  const vals = stations.map((s) => s.pm25).filter((v): v is number => typeof v === "number");
+  if (vals.length === 0) return null;
+  return Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
+}
+
+function OverviewTab({ data, trend, advisory }: {
   data: DashboardData;
-  trendData: { time: string; aqi: number }[];
+  trend: { points: TrendPoint[]; enabled: boolean };
   advisory: ReturnType<typeof getHealthAdvisory>;
 }) {
+  const reporting = data.stations.filter((s) => !s.stale);
   const smogAdvisories = getSmogAdvisories(data);
-  const whoMultiple = Math.round(
-    data.stations.reduce((s, st) => s + (st.pm25 || 0), 0) / data.stations.length / 15
-  );
+  const pm25Avg = meanOf(reporting);
+  const whoMultiple = pm25Avg !== null ? Math.round(pm25Avg / 15) : null;
 
   return (
     <div className="space-y-5 animate-slide-in">
@@ -251,8 +308,13 @@ function OverviewTab({ data, trendData, advisory }: {
         <div className="glass-bright rounded-2xl p-6 flex flex-col items-center justify-center">
           <p className="text-xs text-zinc-500 mb-2 uppercase tracking-wider">City Average AQI</p>
           <AQIGauge value={data.city_avg_aqi} />
-          <p className="text-xs text-zinc-600 mt-2">
-            WHO PM2.5 exposure: <span className="text-zinc-300 font-semibold">{whoMultiple}x</span> safe limit
+          {whoMultiple !== null && (
+            <p className="text-xs text-zinc-600 mt-2">
+              WHO PM2.5 exposure: <span className="text-zinc-300 font-semibold">{whoMultiple}x</span> safe limit
+            </p>
+          )}
+          <p className="text-[10px] text-zinc-700 mt-1">
+            Mean of {data.reporting_count} reporting station{data.reporting_count === 1 ? "" : "s"}
           </p>
         </div>
 
@@ -297,24 +359,31 @@ function OverviewTab({ data, trendData, advisory }: {
         {data.best_station && (
           <AQICard label="Best Station" value={data.best_station.aqi!} category={data.best_station.category} subtitle={data.best_station.name} />
         )}
-        <AQICard label="Active Stations" value={data.stations.length} category="moderate" subtitle="Monitoring points" />
         <AQICard
-          label="PM2.5 Average"
-          value={Math.round(data.stations.reduce((s, st) => s + (st.pm25 || 0), 0) / data.stations.length)}
-          category={getAQICategory(Math.round(data.stations.reduce((s, st) => s + (st.pm25 || 0), 0) / data.stations.length))}
-          subtitle="ug/m3 (WHO limit: 15)"
+          label="Reporting Stations"
+          value={data.reporting_count}
+          category="moderate"
+          subtitle={data.excluded_count > 0 ? `${data.excluded_count} not reporting` : "All stations current"}
         />
+        {pm25Avg !== null && (
+          <AQICard
+            label="PM2.5 Average"
+            value={pm25Avg}
+            category={getAQICategory(pm25Avg)}
+            subtitle="ug/m3 (WHO limit: 15)"
+          />
+        )}
       </div>
 
       {/* Map */}
       <div className="glass rounded-2xl p-1.5">
-        <AQIMap stations={data.stations} />
+        <AQIMap stations={reporting} />
       </div>
 
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <AQITrend data={trendData} />
-        <PollutantBreakdown stations={data.stations} />
+        <AQITrend data={trend.points} enabled={trend.enabled} />
+        <PollutantBreakdown stations={reporting} measured={data.measured_pollutants} />
       </div>
 
       {/* Station Table */}
@@ -324,27 +393,31 @@ function OverviewTab({ data, trendData, advisory }: {
 }
 
 function DepartmentTab({ type, data }: { type: string; data: DashboardData }) {
-  const configs: Record<string, { title: string; subtitle: string; description: string; metrics: { label: string; value: string; detail: string; severity?: string }[] }> = {
+  const reporting = data.stations.filter((s) => !s.stale);
+  const pm25Avg = meanOf(reporting);
+  const pm25Text = pm25Avg !== null ? `${pm25Avg}` : "—";
+
+  const configs: Record<string, { title: string; subtitle: string; description: string; metrics: { label: string; value: string; detail: string; severity?: string; derived?: boolean }[] }> = {
     health: {
       title: "Health Impact Assessment",
       subtitle: "Department of Health & Population",
       description: "Real-time air quality impact on public health. Tracks respiratory risk, hospital preparedness, and vulnerable population exposure.",
       metrics: [
-        { label: "Health Risk Level", value: data.city_avg_aqi > 200 ? "SEVERE" : data.city_avg_aqi > 150 ? "HIGH" : data.city_avg_aqi > 100 ? "MODERATE" : "LOW", detail: "Population exposure risk", severity: data.city_avg_aqi > 200 ? "critical" : data.city_avg_aqi > 150 ? "warning" : "info" },
-        { label: "Public Advisory", value: data.city_avg_aqi > 200 ? "Stay Indoors" : data.city_avg_aqi > 150 ? "Limit Outdoors" : "Normal", detail: "For sensitive groups: children, elderly, respiratory patients" },
-        { label: "PM2.5 Exposure", value: `${Math.round(data.stations.reduce((s, st) => s + (st.pm25 || 0), 0) / data.stations.length)}`, detail: `ug/m3 — ${Math.round(data.stations.reduce((s, st) => s + (st.pm25 || 0), 0) / data.stations.length / 15)}x WHO 24hr limit (15 ug/m3)`, severity: "warning" },
-        { label: "Unhealthy Stations", value: `${data.stations.filter(s => (s.aqi || 0) > 150).length} of ${data.stations.length}`, detail: "Stations exceeding AQI 150 threshold" },
+        { label: "Health Risk Level", value: data.city_avg_aqi > 200 ? "SEVERE" : data.city_avg_aqi > 150 ? "HIGH" : data.city_avg_aqi > 100 ? "MODERATE" : "LOW", detail: "US EPA AQI health category for the network mean", severity: data.city_avg_aqi > 200 ? "critical" : data.city_avg_aqi > 150 ? "warning" : "info", derived: true },
+        { label: "Public Advisory", value: data.city_avg_aqi > 200 ? "Stay Indoors" : data.city_avg_aqi > 150 ? "Limit Outdoors" : "Normal", detail: "US EPA AQI guidance for sensitive groups", derived: true },
+        { label: "PM2.5 Exposure", value: pm25Text, detail: pm25Avg !== null ? `ug/m3 — ${Math.round(pm25Avg / 15)}x WHO 24hr limit (15 ug/m3)` : "Not reported by the network", severity: "warning" },
+        { label: "Unhealthy Stations", value: `${reporting.filter(s => (s.aqi || 0) > 150).length} of ${reporting.length}`, detail: "Reporting stations above AQI 150" },
       ],
     },
     agriculture: {
       title: "Agricultural Impact Monitor",
       subtitle: "Department of Agriculture",
-      description: "Smog impact on crop health, visibility for crop burning detection, and seasonal pollution patterns affecting the Rabi season.",
+      description: "Particulate load across the network during the Rabi season. Crop-yield and burn-attribution conclusions require ground survey and satellite fire data, which this network does not provide.",
       metrics: [
-        { label: "Crop Damage Risk", value: data.city_avg_aqi > 200 ? "SEVERE" : data.city_avg_aqi > 150 ? "HIGH" : "MODERATE", detail: "PM2.5/O3 impact on photosynthesis and yield", severity: data.city_avg_aqi > 200 ? "critical" : "warning" },
-        { label: "Visibility", value: data.city_avg_aqi > 300 ? "< 500m" : data.city_avg_aqi > 200 ? "500m-1km" : data.city_avg_aqi > 150 ? "1-2km" : "> 3km", detail: "Estimated from particulate density" },
-        { label: "Crop Burn Signal", value: data.stations.filter(s => (s.pm10 || 0) > 200).length > 1 ? "DETECTED" : "LOW", detail: "PM10 spike pattern near India border", severity: data.stations.filter(s => (s.pm10 || 0) > 200).length > 1 ? "critical" : "info" },
-        { label: "Wagha Border AQI", value: `${data.stations.find(s => s.name.toLowerCase().includes("wagha") || s.name.toLowerCase().includes("border"))?.aqi ?? "—"}`, detail: "Cross-border pollution indicator" },
+        { label: "Particulate Load", value: data.city_avg_aqi > 200 ? "SEVERE" : data.city_avg_aqi > 150 ? "HIGH" : "MODERATE", detail: "Banded from network AQI. Yield impact requires ground survey to confirm.", severity: data.city_avg_aqi > 200 ? "critical" : "warning", derived: true },
+        { label: "PM10 Average", value: (() => { const v = reporting.map(s => s.pm10).filter((x): x is number => typeof x === "number"); return v.length ? `${Math.round(v.reduce((a, b) => a + b, 0) / v.length)}` : "—"; })(), detail: "ug/m3 — coarse particulates, the dust and crop-burn fraction" },
+        { label: "PM10 Spike Stations", value: `${reporting.filter(s => (s.pm10 || 0) > 200).length} of ${reporting.length}`, detail: "Stations above 200 ug/m3 PM10. Burn attribution needs satellite fire data.", severity: reporting.filter(s => (s.pm10 || 0) > 200).length > 1 ? "critical" : "info", derived: true },
+        { label: "Wagha Border AQI", value: `${reporting.find(s => s.name.toLowerCase().includes("wagha") || s.name.toLowerCase().includes("border"))?.aqi ?? "—"}`, detail: "Easternmost station — proximity indicator only, not an attribution" },
       ],
     },
     environment: {
@@ -352,10 +425,10 @@ function DepartmentTab({ type, data }: { type: string; data: DashboardData }) {
       subtitle: "Punjab EPA / Environment Department",
       description: "National Environmental Quality Standards (NEQS) compliance tracking, emission source analysis, and regulatory enforcement data.",
       metrics: [
-        { label: "NEQS Status", value: data.city_avg_aqi > 150 ? "NON-COMPLIANT" : "COMPLIANT", detail: "National Environmental Quality Standards", severity: data.city_avg_aqi > 150 ? "critical" : "info" },
-        { label: "Primary Pollutant", value: "PM2.5", detail: "Dominant pollutant across all stations year-round" },
-        { label: "Exceeding NEQS", value: `${data.stations.filter(s => (s.pm25 || 0) > 35).length} stations`, detail: "PM2.5 above 35 ug/m3 (NEQS 24hr limit)", severity: "warning" },
-        { label: "Avg PM2.5", value: `${Math.round(data.stations.reduce((s, st) => s + (st.pm25 || 0), 0) / data.stations.length)} ug/m3`, detail: "Network average vs NEQS limit of 35 ug/m3" },
+        { label: "NEQS Status", value: pm25Avg !== null && pm25Avg > 35 ? "ABOVE LIMIT" : "WITHIN LIMIT", detail: "Indicative screening against NEQS PM2.5 24hr limit of 35 ug/m3", severity: pm25Avg !== null && pm25Avg > 35 ? "critical" : "info", derived: true },
+        { label: "Dominant Pollutant", value: "PM2.5", detail: "Reported by WAQI as the dominant pollutant at these stations" },
+        { label: "Above NEQS PM2.5", value: `${reporting.filter(s => (s.pm25 || 0) > 35).length} of ${reporting.length}`, detail: "Reporting stations above 35 ug/m3", severity: "warning" },
+        { label: "Avg PM2.5", value: pm25Avg !== null ? `${pm25Avg} ug/m3` : "—", detail: "Network mean against the NEQS limit of 35 ug/m3" },
       ],
     },
     safecity: {
@@ -363,10 +436,10 @@ function DepartmentTab({ type, data }: { type: string; data: DashboardData }) {
       subtitle: "Punjab Safe City Authority",
       description: "Smog hotspot identification, traffic safety impact assessment, and enforcement priority mapping for anti-smog operations.",
       metrics: [
-        { label: "Hotspot Zones", value: `${data.stations.filter(s => (s.aqi || 0) > 200).length}`, detail: "Areas with AQI > 200 requiring intervention", severity: data.stations.filter(s => (s.aqi || 0) > 200).length > 0 ? "critical" : "info" },
-        { label: "Worst Zone", value: data.worst_station?.name.replace(/, Pakistan$/, "") || "—", detail: `AQI: ${data.worst_station?.aqi ?? "—"}`, severity: "critical" },
-        { label: "Enforcement Level", value: data.city_avg_aqi > 300 ? "EMERGENCY" : data.city_avg_aqi > 200 ? "CRITICAL" : "ELEVATED", detail: "Anti-smog squad deployment priority", severity: data.city_avg_aqi > 200 ? "critical" : "warning" },
-        { label: "Visibility Alert", value: data.city_avg_aqi > 300 ? "ACTIVE" : data.city_avg_aqi > 200 ? "WATCH" : "CLEAR", detail: "Motorway and GT Road traffic safety" },
+        { label: "Stations Above 200", value: `${reporting.filter(s => (s.aqi || 0) > 200).length}`, detail: "Reporting stations in the Very Unhealthy band or worse", severity: reporting.filter(s => (s.aqi || 0) > 200).length > 0 ? "critical" : "info" },
+        { label: "Highest Reading", value: data.worst_station?.name.replace(/, Pakistan$/, "") || "—", detail: `AQI ${data.worst_station?.aqi ?? "—"} — single station, not a zone boundary`, severity: "critical" },
+        { label: "Suggested Priority", value: data.city_avg_aqi > 300 ? "EMERGENCY" : data.city_avg_aqi > 200 ? "CRITICAL" : "ELEVATED", detail: "Banded from network AQI. Deployment decisions rest with the Authority.", severity: data.city_avg_aqi > 200 ? "critical" : "warning", derived: true },
+        { label: "Network Spread", value: (() => { const v = reporting.map(s => s.aqi || 0); return v.length ? `${Math.min(...v)}–${Math.max(...v)}` : "—"; })(), detail: "AQI range across reporting stations — wide spread means localised sources" },
       ],
     },
   };
@@ -393,7 +466,17 @@ function DepartmentTab({ type, data }: { type: string; data: DashboardData }) {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         {config.metrics.map((metric, i) => (
           <div key={i} className="glass rounded-2xl p-5">
-            <p className="text-[11px] text-zinc-500 uppercase tracking-wider">{metric.label}</p>
+            <div className="flex items-start justify-between gap-2">
+              <p className="text-[11px] text-zinc-500 uppercase tracking-wider">{metric.label}</p>
+              {metric.derived && (
+                <span
+                  className="text-[8px] px-1.5 py-0.5 rounded bg-zinc-700/30 text-zinc-500 font-semibold uppercase tracking-wide shrink-0"
+                  title="Computed from AQI thresholds, not directly measured"
+                >
+                  Derived
+                </span>
+              )}
+            </div>
             <p className={`text-xl font-bold mt-1.5 tabular-nums ${
               metric.severity === "critical" ? "text-red-400" :
               metric.severity === "warning" ? "text-amber-400" :
@@ -407,7 +490,7 @@ function DepartmentTab({ type, data }: { type: string; data: DashboardData }) {
       </div>
 
       <div className="glass rounded-2xl p-1.5">
-        <AQIMap stations={data.stations} />
+        <AQIMap stations={reporting} />
       </div>
 
       <StationTable stations={data.stations} />

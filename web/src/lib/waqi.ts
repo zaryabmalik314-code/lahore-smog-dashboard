@@ -1,6 +1,24 @@
-import { Station, getAQICategory } from "./types";
+import { Station, SourceTier, getAQICategory, STALE_AFTER_MINUTES } from "./types";
 
 const WAQI_TOKEN = process.env.WAQI_TOKEN || "";
+
+// WAQI returns an attributions array per station. The first entry is the operator;
+// which operator it is decides how much weight a reading can carry.
+function classifySource(attributions: { name?: string }[]): {
+  attribution: string;
+  tier: SourceTier;
+} {
+  const operator =
+    attributions.map((a) => a.name || "").find((n) => !/World Air Quality Index/i.test(n)) || "Unknown source";
+
+  if (/punjab|pakistan environmental|pepa|epa punjab/i.test(operator)) {
+    return { attribution: operator, tier: "official" };
+  }
+  if (/sensor\.community|citizen|purpleair/i.test(operator)) {
+    return { attribution: operator, tier: "citizen" };
+  }
+  return { attribution: operator, tier: "reference" };
+}
 
 const LAHORE_STATIONS = [
   { id: "@11765", name: "US Embassy Lahore" },
@@ -22,6 +40,13 @@ async function fetchStation(stationId: string): Promise<Station | null> {
   const iaqi = data.iaqi || {};
   const aqi = typeof data.aqi === "number" ? data.aqi : null;
 
+  const recordedAt = data.time?.iso || new Date(Date.now()).toISOString();
+  const ageMinutes = Math.max(
+    0,
+    Math.round((Date.now() - new Date(recordedAt).getTime()) / 60000)
+  );
+  const { attribution, tier } = classifySource(data.attributions || []);
+
   return {
     id: stationId,
     name: data.city?.name || "Unknown",
@@ -38,8 +63,12 @@ async function fetchStation(stationId: string): Promise<Station | null> {
     humidity: iaqi.h?.v ?? null,
     wind_speed: iaqi.w?.v ?? null,
     category: aqi !== null ? getAQICategory(aqi) : "unknown",
-    recorded_at: data.time?.iso || new Date(Date.now()).toISOString(),
+    recorded_at: recordedAt,
     source: "waqi",
+    attribution,
+    tier,
+    age_minutes: ageMinutes,
+    stale: ageMinutes > STALE_AFTER_MINUTES,
   };
 }
 
@@ -56,15 +85,10 @@ export async function fetchAllStations(): Promise<Station[]> {
     .map((r) => r.value);
 }
 
-export function getMockStations(): Station[] {
-  const now = Date.now();
-  const ts = new Date(now).toISOString();
-  return [
-    { id: "@11765", name: "US Embassy Lahore", latitude: 31.5601, longitude: 74.3359, aqi: 178, pm25: 178, pm10: 95, no2: 22, so2: 8, co: 12, o3: 5, temperature: 24, humidity: 65, wind_speed: 3.2, category: "unhealthy", recorded_at: ts, source: "waqi" },
-    { id: "@-74005", name: "Lahore Cantonment", latitude: 31.524, longitude: 74.366, aqi: 162, pm25: 162, pm10: 88, no2: 20, so2: 6, co: 10, o3: 4, temperature: 23, humidity: 68, wind_speed: 3.5, category: "unhealthy", recorded_at: ts, source: "waqi" },
-    { id: "@-538468", name: "Naila Road", latitude: 31.536, longitude: 74.33, aqi: 210, pm25: 210, pm10: 120, no2: 32, so2: 14, co: 18, o3: 9, temperature: 26, humidity: 58, wind_speed: 2.1, category: "very_unhealthy", recorded_at: ts, source: "waqi" },
-    { id: "@-576577", name: "Egerton Road", latitude: 31.5609, longitude: 74.3308, aqi: 195, pm25: 195, pm10: 110, no2: 28, so2: 12, co: 15, o3: 7, temperature: 25, humidity: 62, wind_speed: 2.8, category: "unhealthy", recorded_at: ts, source: "waqi" },
-    { id: "@-582631", name: "Wagha Border", latitude: 31.6022, longitude: 74.5449, aqi: 230, pm25: 230, pm10: 140, no2: 35, so2: 18, co: 22, o3: 11, temperature: 27, humidity: 55, wind_speed: 1.8, category: "very_unhealthy", recorded_at: ts, source: "waqi" },
-    { id: "@-577588", name: "Lathepur", latitude: 31.7176, longitude: 74.3895, aqi: 145, pm25: 145, pm10: 78, no2: 18, so2: 5, co: 9, o3: 3, temperature: 23, humidity: 70, wind_speed: 3.8, category: "unhealthy_sensitive", recorded_at: ts, source: "waqi" },
-  ];
+// Which pollutants any station in the network actually reports right now.
+// Used to decide what the UI is allowed to chart — a pollutant nobody measures
+// must not render as a zero bar.
+export function availablePollutants(stations: Station[]): Set<keyof Station> {
+  const keys: (keyof Station)[] = ["pm25", "pm10", "no2", "so2", "co", "o3"];
+  return new Set(keys.filter((k) => stations.some((s) => s[k] != null)));
 }
