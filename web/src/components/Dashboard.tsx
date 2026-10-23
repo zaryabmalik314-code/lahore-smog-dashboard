@@ -12,10 +12,12 @@ import DepartmentAnalysis from "./DepartmentAnalysis";
 import ThemeToggle from "./ThemeToggle";
 import OutlookPanel from "./OutlookPanel";
 import AssessmentPanel from "./AssessmentPanel";
+import AQIHero from "./AQIHero";
+import HourStrip from "./HourStrip";
 import { buildOutlook, type Outlook } from "@/lib/outlook";
-import { assess, findingsFor, type Assessment } from "@/lib/assessment";
+import { assess, findingsFor } from "@/lib/assessment";
 import type { DashboardData, SourceTier, TrendPoint } from "@/lib/types";
-import { getAQICategory, AQI_COLORS, AQI_INK, AQI_LABELS, SOURCE_TIER_LABELS } from "@/lib/types";
+import { getAQICategory, AQI_COLORS, AQI_INK, SOURCE_TIER_LABELS } from "@/lib/types";
 
 const AQIMap = dynamic(() => import("./AQIMap"), { ssr: false });
 
@@ -165,7 +167,6 @@ export default function Dashboard() {
   const advisory = getHealthAdvisory(data.city_avg_aqi);
   const category = getAQICategory(data.city_avg_aqi);
   const accentColor = AQI_COLORS[category];
-  const inkColor = AQI_INK[category];
 
   const issued = new Date(data.last_updated);
   const reference = `LAQ-${issued.getUTCFullYear()}${String(issued.getUTCMonth() + 1).padStart(2, "0")}${String(issued.getUTCDate()).padStart(2, "0")}-${String(issued.getUTCHours()).padStart(2, "0")}${String(issued.getUTCMinutes()).padStart(2, "0")}`;
@@ -258,21 +259,27 @@ export default function Dashboard() {
         </div>
       </header>
 
-      {/* Standing advisory strip */}
+      {/* Standing advisory — inset and tinted so it reads as an alert rather
+          than a rule across the page. */}
       {data.city_avg_aqi > 150 && (
-        <div
-          style={{
-            background: "var(--paper-sunk)",
-            borderBottom: `1px solid var(--rule)`,
-            borderLeft: `4px solid ${accentColor}`,
-          }}
-        >
-          <div className="max-w-[1180px] mx-auto px-5 sm:px-8 py-2.5 flex items-baseline gap-3 flex-wrap">
-            <span className="text-xs font-bold uppercase tracking-wider" style={{ color: inkColor }}>
+        <div className="max-w-[1180px] mx-auto px-5 sm:px-8 pt-6">
+          <div
+            className="flex items-center gap-3 flex-wrap px-4 py-3"
+            style={{
+              background: `color-mix(in srgb, ${accentColor} 12%, transparent)`,
+              border: `1px solid color-mix(in srgb, ${accentColor} 34%, transparent)`,
+              borderRadius: "var(--radius-sm)",
+            }}
+          >
+            <span
+              className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0"
+              style={{ background: accentColor, color: "#fff" }}
+            >
               {advisory.level}
             </span>
-            <span className="text-xs" style={{ color: "var(--ink-2)" }}>
-              {advisory.action} — network average AQI {data.city_avg_aqi}
+            <span className="text-sm" style={{ color: "var(--ink)" }}>
+              {advisory.action}
+              <span style={{ color: "var(--ink-2)" }}> — network average AQI {data.city_avg_aqi}</span>
             </span>
           </div>
         </div>
@@ -338,52 +345,6 @@ export default function Dashboard() {
   );
 }
 
-function AQIGauge({ value, size = 190 }: { value: number; size?: number }) {
-  const category = getAQICategory(value);
-  const color = AQI_COLORS[category];
-  const ink = AQI_INK[category];
-  const radius = (size - 24) / 2;
-  const circumference = Math.PI * radius;
-  // The EPA scale is open-ended above 500; clamp so the arc never overruns.
-  const percent = Math.min(value / 500, 1);
-  const offset = circumference * (1 - percent);
-
-  return (
-    <div className="relative flex items-center justify-center" style={{ width: size, height: size / 2 + 42 }}>
-      <svg
-        width={size}
-        height={size / 2 + 12}
-        viewBox={`0 0 ${size} ${size / 2 + 12}`}
-        role="img"
-        aria-label={`Air quality index ${value}, ${AQI_LABELS[category]}`}
-      >
-        <path
-          d={`M 12 ${size / 2} A ${radius} ${radius} 0 0 1 ${size - 12} ${size / 2}`}
-          fill="none"
-          stroke="var(--rule)"
-          strokeWidth="10"
-        />
-        <path
-          d={`M 12 ${size / 2} A ${radius} ${radius} 0 0 1 ${size - 12} ${size / 2}`}
-          fill="none"
-          stroke={color}
-          strokeWidth="10"
-          strokeDasharray={circumference}
-          strokeDashoffset={offset}
-          className="aqi-ring"
-        />
-      </svg>
-      <div className="absolute bottom-0 text-center">
-        <div className="text-[44px] leading-none font-bold tabular" style={{ color: ink }}>
-          {value}
-        </div>
-        <div className="text-xs font-semibold mt-1.5" style={{ color: ink }}>
-          {AQI_LABELS[category]}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 export const TIER_COLORS: Record<SourceTier, string> = {
   official: "var(--tier-official)",
@@ -431,62 +392,53 @@ function OverviewTab({ data, trend, advisory }: {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Summary: City AQI + Advisory */}
-      <section className="grid grid-cols-1 lg:grid-cols-[300px_minmax(0,1fr)] gap-5">
-        <div className="panel rule-top p-6 flex flex-col items-center justify-center text-center">
-          <p className="field-label">Network average AQI</p>
-          <div className="mt-3">
-            <AQIGauge value={data.city_avg_aqi} />
+      {/* Headline index + advisory */}
+      <AQIHero
+        value={data.city_avg_aqi}
+        reportingCount={data.reporting_count}
+        whoMultiple={whoMultiple}
+        pm25Avg={pm25Avg}
+        outlook={outlook}
+        advisoryAction={advisory.action}
+        advisoryMessage={advisory.message}
+      />
+
+      {/* Standing advisories */}
+      {smogAdvisories.length > 0 && (
+        <section className="panel">
+          <div className="px-5 py-3.5" style={{ borderBottom: "1px solid var(--panel-border)" }}>
+            <h3 className="text-sm font-semibold" style={{ color: "var(--ink)" }}>
+              Standing advisories
+            </h3>
           </div>
-          <p className="text-xs" style={{ color: "var(--ink-3)" }}>
-            Mean of {data.reporting_count} reporting station{data.reporting_count === 1 ? "" : "s"}
-          </p>
-          {whoMultiple !== null && (
-            <p className="text-xs mt-2 pt-2.5 w-full" style={{ color: "var(--ink-2)", borderTop: "1px solid var(--rule)" }}>
-              PM2.5 at{" "}
-              <span className="font-semibold" style={{ color: "var(--ink)" }}>{whoMultiple}×</span>{" "}
-              the WHO 24-hour guideline
-            </p>
-          )}
-        </div>
-
-        <div className="panel rule-top p-6">
-          <p className="field-label">Public health advisory</p>
-          <h2 className="text-base font-semibold mt-2" style={{ color: "var(--ink)" }}>
-            {advisory.action}
-          </h2>
-          <p className="text-sm mt-2 leading-relaxed max-w-2xl" style={{ color: "var(--ink-2)" }}>
-            {advisory.message}
-          </p>
-
-          {smogAdvisories.length > 0 && (
-            <dl className="mt-5 pt-4" style={{ borderTop: "1px solid var(--rule)" }}>
-              {smogAdvisories.slice(0, 4).map((adv, i) => (
-                <div
-                  key={i}
-                  className="grid grid-cols-[112px_minmax(0,1fr)] gap-4 py-2"
-                  style={i > 0 ? { borderTop: "1px solid var(--rule)" } : undefined}
+          <dl className="grid grid-cols-1 md:grid-cols-2">
+            {smogAdvisories.slice(0, 4).map((adv, i) => (
+              <div
+                key={i}
+                className="px-5 py-4 flex items-start gap-3"
+                style={{
+                  borderTop: i > 1 || (i === 1 && smogAdvisories.length > 1) ? "1px solid var(--panel-border)" : undefined,
+                  borderLeft: i % 2 === 1 ? "1px solid var(--panel-border)" : undefined,
+                }}
+              >
+                <span
+                  className="shrink-0 text-[9px] font-bold uppercase tracking-wider px-2 py-1 rounded-full"
+                  style={{
+                    background: `color-mix(in srgb, ${severityInk[adv.severity]} 16%, transparent)`,
+                    color: severityInk[adv.severity],
+                  }}
                 >
-                  <dt
-                    className="text-[10px] font-bold uppercase tracking-wider pt-0.5"
-                    style={{ color: severityInk[adv.severity] }}
-                  >
-                    {adv.icon}
-                  </dt>
-                  <dd>
-                    <span className="text-xs font-semibold" style={{ color: "var(--ink)" }}>
-                      {adv.title}
-                    </span>
-                    <span className="text-xs ml-2 leading-relaxed" style={{ color: "var(--ink-2)" }}>
-                      {adv.detail}
-                    </span>
-                  </dd>
+                  {adv.icon}
+                </span>
+                <div>
+                  <p className="text-sm font-semibold" style={{ color: "var(--ink)" }}>{adv.title}</p>
+                  <p className="text-xs mt-1 leading-relaxed" style={{ color: "var(--ink-2)" }}>{adv.detail}</p>
                 </div>
-              ))}
-            </dl>
-          )}
-        </div>
-      </section>
+              </div>
+            ))}
+          </dl>
+        </section>
+      )}
 
       {/* Key figures */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
@@ -511,6 +463,8 @@ function OverviewTab({ data, trend, advisory }: {
           />
         )}
       </div>
+
+      <HourStrip points={trend.points} />
 
       {/* Map */}
       <section className="panel">

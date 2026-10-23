@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { AQI_COLORS, AQI_INK, AQI_LABELS, SOURCE_TIER_LABELS, type Station } from "@/lib/types";
@@ -137,8 +137,13 @@ export default function AQIMap({ stations }: AQIMapProps) {
     .map((s) => `${s.id}:${s.latitude},${s.longitude}`)
     .join("|");
 
-  const latestStations = useRef(stations);
-  latestStations.current = stations;
+  // Memoised on the signature so the marker effect receives a stable value
+  // without reading a ref during render.
+  const stationsForMap = useMemo(
+    () => stations,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [signature]
+  );
 
   useEffect(() => {
     const map = mapInstanceRef.current;
@@ -148,7 +153,7 @@ export default function AQIMap({ stations }: AQIMapProps) {
       if (layer instanceof L.Marker) map.removeLayer(layer);
     });
 
-    latestStations.current.forEach((station) => {
+    stationsForMap.forEach((station) => {
       const marker = L.marker([station.latitude, station.longitude], {
         icon: createMarkerIcon(station.aqi, station.category),
       });
@@ -179,20 +184,18 @@ export default function AQIMap({ stations }: AQIMapProps) {
       marker.addTo(map);
     });
 
-    const coords = latestStations.current
+    const coords = stationsForMap
       .filter((s) => Number.isFinite(s.latitude) && Number.isFinite(s.longitude))
       .map((s) => [s.latitude, s.longitude] as [number, number]);
 
     boundsRef.current = coords.length ? L.latLngBounds(coords) : null;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [signature]);
+  }, [stationsForMap]);
 
   // Reframe only when which points are on the map changes, and only while the
   // viewer has not taken control.
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (map) fitToStations(map);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [positionSignature]);
 
   return <div ref={mapRef} className="w-full h-[420px]" />;
