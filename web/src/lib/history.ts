@@ -9,7 +9,14 @@ let schemaReady: Promise<void> | null = null;
 function client(): postgres.Sql | null {
   if (!DATABASE_URL) return null;
   if (!sql) {
-    sql = postgres(DATABASE_URL, { max: 3, idle_timeout: 20, connect_timeout: 10 });
+    sql = postgres(DATABASE_URL, {
+      max: 3,
+      idle_timeout: 20,
+      connect_timeout: 10,
+      // The schema bootstrap is idempotent, so its "already exists" notices
+      // would otherwise fill every scheduled run's log.
+      onnotice: () => {},
+    });
   }
   return sql;
 }
