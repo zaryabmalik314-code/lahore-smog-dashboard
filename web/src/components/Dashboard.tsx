@@ -6,6 +6,8 @@ import AQICard from "./AQICard";
 import StationTable from "./StationTable";
 import AQITrend from "./AQITrend";
 import PollutantBreakdown from "./PollutantBreakdown";
+import StationDetail, { type StationSeries } from "./StationDetail";
+import ReferenceSection from "./ReferenceSection";
 import type { DashboardData, SourceTier, TrendPoint } from "@/lib/types";
 import { getAQICategory, AQI_COLORS, AQI_INK, AQI_LABELS, SOURCE_TIER_LABELS } from "@/lib/types";
 
@@ -51,6 +53,7 @@ const TABS = [
   { id: "agriculture", label: "Agriculture", icon: "leaf" },
   { id: "environment", label: "Environment", icon: "globe" },
   { id: "safecity", label: "Safe City", icon: "shield" },
+  { id: "reference", label: "Reference", icon: "book" },
 ] as const;
 
 export default function Dashboard() {
@@ -58,7 +61,11 @@ export default function Dashboard() {
   const [activeTab, setActiveTab] = useState("overview");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [trend, setTrend] = useState<{ points: TrendPoint[]; enabled: boolean }>({ points: [], enabled: false });
+  const [trend, setTrend] = useState<{ points: TrendPoint[]; stations: StationSeries[]; enabled: boolean }>({
+    points: [],
+    stations: [],
+    enabled: false,
+  });
   const [time, setTime] = useState("");
 
   useEffect(() => {
@@ -84,9 +91,13 @@ export default function Dashboard() {
       try {
         const res = await fetch("/api/trend");
         const body = await res.json();
-        setTrend({ points: body.points || [], enabled: Boolean(body.enabled) });
+        setTrend({
+          points: body.points || [],
+          stations: body.stations || [],
+          enabled: Boolean(body.enabled),
+        });
       } catch {
-        setTrend({ points: [], enabled: false });
+        setTrend({ points: [], stations: [], enabled: false });
       }
     };
 
@@ -260,11 +271,14 @@ export default function Dashboard() {
 
       {/* Main Content */}
       <main className="max-w-[1180px] mx-auto px-5 sm:px-8 py-7">
-        {activeTab === "overview" && <OverviewTab data={data} trend={trend} advisory={advisory} />}
+        {activeTab === "overview" && (
+          <OverviewTab data={data} trend={trend} advisory={advisory} />
+        )}
         {activeTab === "health" && <DepartmentTab type="health" data={data} />}
         {activeTab === "agriculture" && <DepartmentTab type="agriculture" data={data} />}
         {activeTab === "environment" && <DepartmentTab type="environment" data={data} />}
         {activeTab === "safecity" && <DepartmentTab type="safecity" data={data} />}
+        {activeTab === "reference" && <ReferenceSection />}
       </main>
 
       {/* Footer — data provenance */}
@@ -387,7 +401,7 @@ function meanOf(stations: { pm25: number | null }[]): number | null {
 
 function OverviewTab({ data, trend, advisory }: {
   data: DashboardData;
-  trend: { points: TrendPoint[]; enabled: boolean };
+  trend: { points: TrendPoint[]; stations: StationSeries[]; enabled: boolean };
   advisory: ReturnType<typeof getHealthAdvisory>;
 }) {
   const reporting = data.stations.filter((s) => !s.stale);
@@ -501,6 +515,9 @@ function OverviewTab({ data, trend, advisory }: {
         <AQITrend data={trend.points} enabled={trend.enabled} />
         <PollutantBreakdown stations={reporting} measured={data.measured_pollutants} />
       </div>
+
+      {/* Per-station records */}
+      <StationDetail stations={trend.stations} />
 
       {/* Station Table */}
       <StationTable stations={data.stations} />

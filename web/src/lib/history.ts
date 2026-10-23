@@ -116,6 +116,112 @@ export async function getTrend(hours = 24): Promise<TrendPoint[]> {
   }));
 }
 
+export interface StationSeries {
+  station_id: string;
+  station_name: string;
+  attribution: string;
+  tier: string;
+  points: { time: string; aqi: number }[];
+  /** Readings on record for this station in the window. */
+  samples: number;
+  peak: number | null;
+  low: number | null;
+  mean: number | null;
+  /** Readings above the NEQS 24-hour PM2.5 limit of 35 ug/m3. */
+  above_neqs: number;
+  /** Readings above the WHO 24-hour PM2.5 guideline of 15 ug/m3. */
+  above_who: number;
+}
+
+/**
+ * Per-station history over the trailing window, with the exceedance counts a
+ * compliance reader asks for. Counts are over recorded readings, not clock
+ * hours — a station that stopped reporting contributes nothing rather than
+ * being assumed compliant.
+ */
+export async function getStationSeries(hours = 24): Promise<StationSeries[]> {
+  const db = client();
+  if (!db) return [];
+
+  await ensureSchema(db);
+
+  const rows = await db<
+    {
+      station_id: string;
+      station_name: string;
+      attribution: string | null;
+      tier: string | null;
+      bucket: Date;
+      avg_aqi: number;
+      avg_pm25: number | null;
+    }[]
+  >`
+    SELECT
+      station_id,
+      MAX(station_name)              AS station_name,
+      MAX(attribution)               AS attribution,
+      MAX(tier)                      AS tier,
+      date_trunc('hour', recorded_at) AS bucket,
+      ROUND(AVG(aqi))::int           AS avg_aqi,
+      AVG(pm25)                      AS avg_pm25
+    FROM readings
+    WHERE recorded_at >= NOW() - (${hours} * INTERVAL '1 hour')
+      AND aqi IS NOT NULL
+    GROUP BY station_id, bucket
+    ORDER BY station_id, bucket ASC
+  `;
+
+  const byStation = new Map<string, StationSeries>();
+
+  for (const r of rows) {
+    let s = byStation.get(r.station_id);
+    if (!s) {
+      s = {
+        station_id: r.station_id,
+        station_name: r.station_name,
+        attribution: r.attribution || "Unknown source",
+        tier: r.tier || "reference",
+        points: [],
+        samples: 0,
+        peak: null,
+        low: null,
+        mean: null,
+        above_neqs: 0,
+        above_who: 0,
+      };
+      byStation.set(r.station_id, s);
+    }
+
+    s.points.push({
+      time: new Date(r.bucket).toLocaleTimeString("en-GB", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+        timeZone: "Asia/Karachi",
+      }),
+      aqi: r.avg_aqi,
+    });
+
+    s.samples += 1;
+    s.peak = s.peak === null ? r.avg_aqi : Math.max(s.peak, r.avg_aqi);
+    s.low = s.low === null ? r.avg_aqi : Math.min(s.low, r.avg_aqi);
+
+    const pm25 = r.avg_pm25 === null ? null : Number(r.avg_pm25);
+    if (pm25 !== null) {
+      if (pm25 > 35) s.above_neqs += 1;
+      if (pm25 > 15) s.above_who += 1;
+    }
+  }
+
+  for (const s of byStation.values()) {
+    s.mean = s.points.length
+      ? Math.round(s.points.reduce((a, p) => a + p.aqi, 0) / s.points.length)
+      : null;
+  }
+
+  return [...byStation.values()].sort((a, b) => (b.peak || 0) - (a.peak || 0));
+}
+
 export function historyEnabled(): boolean {
   return Boolean(DATABASE_URL);
 }
