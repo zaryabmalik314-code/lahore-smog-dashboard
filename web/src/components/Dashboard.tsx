@@ -8,6 +8,7 @@ import AQITrend from "./AQITrend";
 import PollutantBreakdown from "./PollutantBreakdown";
 import StationDetail, { type StationSeries } from "./StationDetail";
 import ReferenceSection from "./ReferenceSection";
+import DepartmentAnalysis from "./DepartmentAnalysis";
 import type { DashboardData, SourceTier, TrendPoint } from "@/lib/types";
 import { getAQICategory, AQI_COLORS, AQI_INK, AQI_LABELS, SOURCE_TIER_LABELS } from "@/lib/types";
 
@@ -644,6 +645,12 @@ function DepartmentTab({ type, data }: { type: string; data: DashboardData }) {
           </div>
         ))}
       </div>
+
+      <DepartmentAnalysis
+        type={type as "health" | "agriculture" | "environment" | "safecity"}
+        stations={data.stations}
+        networkMean={data.city_avg_aqi}
+      />
 
       <section className="panel">
         <div className="px-5 py-3.5" style={{ borderBottom: "1px solid var(--rule)" }}>
