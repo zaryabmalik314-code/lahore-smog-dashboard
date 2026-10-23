@@ -372,7 +372,7 @@ function OverviewTab({ data, trend, advisory }: {
   };
 
   const outlook = trend.outlook ?? buildOutlook(trend.stations);
-  const assessment = assess(data, outlook);
+  const assessment = assess(data, outlook, trend.points);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -497,7 +497,7 @@ function DepartmentTab({ type, data, trend }: {
   trend: { points: TrendPoint[]; stations: StationSeries[]; outlook: Outlook | null; enabled: boolean };
 }) {
   const outlook = trend.outlook ?? buildOutlook(trend.stations);
-  const deptFindings = findingsFor(assess(data, outlook), type);
+  const deptFindings = findingsFor(assess(data, outlook, trend.points), type);
   // Memoised: the clock re-renders this every second, and a fresh array
   // each tick would tear down and refit the map layer continuously.
   const reporting = useMemo(() => data.stations.filter((s) => !s.stale), [data.stations]);

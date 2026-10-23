@@ -1,4 +1,4 @@
-import type { DashboardData, Station } from "./types";
+import type { DashboardData, Station, TrendPoint } from "./types";
 import type { Outlook } from "./outlook";
 
 export type Severity = "critical" | "warning" | "info";
@@ -37,6 +37,8 @@ export interface Assessment {
 }
 
 const NEQS_PM25 = 35;
+/** Matches the band the outlook uses to call a trend flat. */
+const STEADY_BAND = 3;
 const WHO_PM25 = 15;
 
 function mean(nums: number[]): number | null {
@@ -61,7 +63,11 @@ function band(aqi: number): string {
  * department may act on should not be able to invent a number, and each
  * finding states the values it rests on so a reader can check it.
  */
-export function assess(data: DashboardData, outlook: Outlook): Assessment {
+export function assess(
+  data: DashboardData,
+  outlook: Outlook,
+  trend: TrendPoint[] = []
+): Assessment {
   const reporting = data.stations.filter((s) => !s.stale && s.aqi !== null);
   const findings: Finding[] = [];
   const basis: string[] = [];
@@ -104,6 +110,25 @@ export function assess(data: DashboardData, outlook: Outlook): Assessment {
         ],
       });
       basis.push(`Trend fitted over ${Math.max(...outlook.stations.map((s) => s.basis_hours))} hourly points.`);
+    } else if (outlook.city_direction === "steady") {
+      findings.push({
+        id: "trend-flat",
+        severity: avg > 150 ? "warning" : "info",
+        headline: "Holding steady, neither clearing nor building",
+        detail:
+          `The network has moved less than ${STEADY_BAND} AQI points per hour across the hours on record. ` +
+          `At a mean of ${avg} that means conditions are persisting rather than passing, and exposure accumulates for as long as they do.`,
+        departments: ["health", "environment"],
+        caveat:
+          "A flat trend says nothing about what happens at the next inversion or wind shift; it describes the hours behind it only.",
+        actions: [
+          {
+            department: "health",
+            owner: "Health & Population",
+            text: "Persistent exposure matters more than a peak. Advisory messaging should assume the current band holds through the day rather than easing on its own.",
+          },
+        ],
+      });
     } else if (outlook.city_direction === "improving") {
       findings.push({
         id: "trend-down",
@@ -123,6 +148,35 @@ export function assess(data: DashboardData, outlook: Outlook): Assessment {
         "A direction needs at least four hourly readings per station. Recording runs every 15 minutes, so this fills in as the day progresses.",
       departments: [],
     });
+  }
+
+  // ── Where today sits against the hours already on record ──────────────
+  // A range of a few points across the day is noise; reporting it as a
+  // movement would manufacture significance that is not there.
+  if (trend.length >= 3 && Math.max(...trend.map((t) => t.aqi)) - Math.min(...trend.map((t) => t.aqi)) >= 15) {
+    const values = trend.map((t) => t.aqi);
+    const peak = Math.max(...values);
+    const low = Math.min(...values);
+    const peakAt = trend[values.indexOf(peak)]?.time;
+    const lowAt = trend[values.indexOf(low)]?.time;
+    const fromPeak = peak - avg;
+
+    findings.push({
+      id: "today",
+      severity: avg >= peak ? "warning" : "info",
+      headline:
+        avg >= peak
+          ? `At its worst so far today, ${avg}`
+          : `Down ${fromPeak} from today's peak of ${peak}`,
+      detail:
+        avg >= peak
+          ? `Nothing on record today has been worse. The best hour was ${low} at ${lowAt}, so the day has spanned ${peak - low} points.`
+          : `The peak was ${peak} at ${peakAt} and the best hour ${low} at ${lowAt}. The current ${avg} sits ${avg - low} points above the day's best, so "improving" is relative to a bad peak, not to clean air.`,
+      departments: ["health", "environment"],
+      caveat:
+        `Based on the ${trend.length} hour${trend.length === 1 ? "" : "s"} recorded so far, not on a full day or on any earlier date.`,
+    });
+    basis.push(`Today's record spans ${trend.length} hour${trend.length === 1 ? "" : "s"}, ${low} to ${peak} AQI.`);
   }
 
   // ── Spatial spread: where it is worse, and by how much ─────────────────
@@ -239,6 +293,35 @@ export function assess(data: DashboardData, outlook: Outlook): Assessment {
   const official = reporting.filter((s) => s.tier === "official").length;
   basis.push(`${official} of ${reporting.length} reporting stations are on the official Punjab network.`);
 
+  // ── How much weight this assessment carries ───────────────────────────
+  const officialCount = reporting.filter((s) => s.tier === "official").length;
+  const fits = outlook.stations.filter((st) => st.projected !== null).map((st) => st.fit);
+  const meanFit = fits.length ? fits.reduce((a, b) => a + b, 0) / fits.length : 0;
+
+  const weak: string[] = [];
+  if (reporting.length < 5) weak.push(`only ${reporting.length} stations reporting`);
+  if (officialCount < 2) weak.push(`only ${officialCount} on the official network`);
+  if (fits.length && meanFit < 0.5) weak.push("trends fit the recent hours poorly");
+  if (trend.length < 6) weak.push(`only ${trend.length} hours on record today`);
+
+  findings.push({
+    id: "confidence",
+    severity: "info",
+    headline:
+      weak.length === 0
+        ? "Readings are well supported"
+        : `Treat with caution — ${weak.length} limitation${weak.length === 1 ? "" : "s"}`,
+    detail:
+      weak.length === 0
+        ? `${reporting.length} stations reporting, ${officialCount} of them on the official Punjab network, with trends that fit the recent hours closely.`
+        : `This assessment rests on ${reporting.length} reporting station${reporting.length === 1 ? "" : "s"} (${officialCount} official). Specifically: ${weak.join("; ")}.`,
+    departments: ["environment"],
+    caveat:
+      "Stated so a reader can judge how much weight a finding deserves before acting on or citing it.",
+  });
+
+  const criticalCount = findings.filter((f) => f.severity === "critical").length;
+
   const summary =
     reporting.length === 0
       ? "No station is currently reporting, so no assessment can be made."
@@ -246,7 +329,7 @@ export function assess(data: DashboardData, outlook: Outlook): Assessment {
         (outlook.city_direction && outlook.city_direction !== "steady"
           ? `, and ${outlook.city_direction} at ${Math.abs(outlook.city_rate ?? 0)} points per hour`
           : "") +
-        `. ${findings.filter((f) => f.severity === "critical").length} finding${findings.filter((f) => f.severity === "critical").length === 1 ? "" : "s"} require immediate attention.`;
+        `. ${criticalCount === 0 ? "Nothing requires immediate action" : criticalCount === 1 ? "One finding requires immediate attention" : `${criticalCount} findings require immediate attention`}.`;
 
   const order: Record<Severity, number> = { critical: 0, warning: 1, info: 2 };
   findings.sort((a, b) => order[a.severity] - order[b.severity]);
