@@ -7,7 +7,7 @@ type Theme = "civic" | "console";
 const STORAGE_KEY = "laq-theme";
 
 export default function ThemeToggle() {
-  const [theme, setTheme] = useState<Theme>("civic");
+  const [theme, setTheme] = useState<Theme>("console");
 
   useEffect(() => {
     let stored: Theme | null = null;
@@ -16,7 +16,7 @@ export default function ThemeToggle() {
     } catch {
       // Private browsing or blocked storage — fall back to the default.
     }
-    const initial: Theme = stored === "console" ? "console" : "civic";
+    const initial: Theme = stored === "civic" ? "civic" : "console";
     setTheme(initial);
     document.documentElement.dataset.theme = initial;
   }, []);

@@ -1,10 +1,11 @@
 @import "tailwindcss";
 
 /* ─── Theme: civic (light) ─────────────────────────────────────────────
-   Printable paper base. AQI steps validated against #fcfcfb for lightness
-   band, chroma, CVD separation and normal-vision separation.             */
-:root,
+   Paper base, and what the bulletin always prints as regardless of the
+   theme on screen. AQI steps validated against #fcfcfb for lightness band,
+   chroma, CVD separation and normal-vision separation.                    */
 :root[data-theme="civic"] {
+  color-scheme: light;
   --paper: #fcfcfb;
   --paper-sunk: #f4f4f1;
   --paper-raised: #ffffff;
@@ -59,11 +60,13 @@
   --map-filter: grayscale(1) contrast(0.86) brightness(1.08);
 }
 
-/* ─── Theme: console (dark) ────────────────────────────────────────────
+/* ─── Theme: console (dark) — the default ──────────────────────────────
    Operations surface. Its own validated AQI steps — the civic steps are
    unreadable here, so they are re-stepped against the dark surface rather
    than reused.                                                           */
+:root,
 :root[data-theme="console"] {
+  color-scheme: dark;
   --paper: #0d1117;
   --paper-sunk: #161b22;
   --paper-raised: #11161d;
@@ -226,6 +229,52 @@ body {
 }
 
 @media print {
+  /* Always print on paper, whatever theme is on screen. The console theme
+     would otherwise come out as a black page, and its AQI steps are chosen
+     for contrast against a dark surface, not against white. */
+  :root,
+  :root[data-theme="console"],
+  :root[data-theme="civic"] {
+    --paper: #fcfcfb;
+    --paper-sunk: #f4f4f1;
+    --paper-raised: #ffffff;
+    --ink: #16181d;
+    --ink-2: #474c55;
+    --ink-3: #6b7280;
+    --rule: #dcdcd6;
+    --rule-strong: #b8b8b1;
+    --accent: #1d4ed8;
+    --tier-official: #1d4ed8;
+    --tier-citizen: #0f766e;
+    --tier-reference: #5c5c56;
+
+    --aqi-good: #1a7f37;
+    --aqi-moderate: #e0a800;
+    --aqi-unhealthy-sensitive: #d1500a;
+    --aqi-unhealthy: #9e1414;
+    --aqi-very-unhealthy: #6b21a8;
+    --aqi-hazardous: #8c2240;
+    --aqi-unknown: #8b8b84;
+
+    --aqi-good-ink: #166534;
+    --aqi-moderate-ink: #8a6500;
+    --aqi-unhealthy-sensitive-ink: #b8470b;
+    --aqi-unhealthy-ink: #9e1414;
+    --aqi-very-unhealthy-ink: #6b21a8;
+    --aqi-hazardous-ink: #8c2240;
+    --aqi-unknown-ink: #5c5c56;
+
+    --on-aqi-good: #ffffff;
+    --on-aqi-moderate: #2a1f00;
+    --on-aqi-unhealthy-sensitive: #ffffff;
+    --on-aqi-unhealthy: #ffffff;
+    --on-aqi-very-unhealthy: #ffffff;
+    --on-aqi-hazardous: #ffffff;
+    --on-aqi-unknown: #ffffff;
+
+    --map-filter: grayscale(1) contrast(0.86) brightness(1.08);
+  }
+
   .no-print,
   .leaflet-control-zoom,
   .leaflet-control-attribution {
