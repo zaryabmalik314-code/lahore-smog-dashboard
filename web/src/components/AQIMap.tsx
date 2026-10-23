@@ -38,6 +38,18 @@ function createMarkerIcon(aqi: number | null, category: string): L.DivIcon {
 export default function AQIMap({ stations }: AQIMapProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
+  const boundsRef = useRef<L.LatLngBounds | null>(null);
+
+  /**
+   * Frame every station rather than using a fixed zoom. At a narrow container
+   * width a fixed zoom leaves the outlying stations — Wagha Border, Lathepur —
+   * outside the viewport entirely.
+   */
+  const fitToStations = (map: L.Map) => {
+    const b = boundsRef.current;
+    if (!b || !b.isValid()) return;
+    map.fitBounds(b, { padding: [36, 36], maxZoom: 13, animate: false });
+  };
 
   useEffect(() => {
     if (!mapRef.current || mapInstanceRef.current) return;
@@ -59,8 +71,12 @@ export default function AQIMap({ stations }: AQIMapProps) {
 
     // Leaflet caches the container size at init. If the panel is still settling
     // (fonts, fade-in, responsive reflow) it tiles only the area it measured,
-    // so re-measure whenever the container's box actually changes.
-    const observer = new ResizeObserver(() => map.invalidateSize());
+    // so re-measure whenever the container's box actually changes — and refit,
+    // since the area that holds every station depends on the container width.
+    const observer = new ResizeObserver(() => {
+      map.invalidateSize();
+      fitToStations(map);
+    });
     observer.observe(mapRef.current);
 
     return () => {
@@ -108,6 +124,13 @@ export default function AQIMap({ stations }: AQIMapProps) {
 
       marker.addTo(map);
     });
+
+    const coords = stations
+      .filter((s) => Number.isFinite(s.latitude) && Number.isFinite(s.longitude))
+      .map((s) => [s.latitude, s.longitude] as [number, number]);
+
+    boundsRef.current = coords.length ? L.latLngBounds(coords) : null;
+    fitToStations(map);
   }, [stations]);
 
   return <div ref={mapRef} className="w-full h-[420px]" />;
