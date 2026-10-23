@@ -703,6 +703,18 @@ function DepartmentTab({ type, data, trend }: {
                 <dd>
                   <p className="text-sm font-semibold" style={{ color: "var(--ink)" }}>{f.headline}</p>
                   <p className="text-xs mt-1.5 leading-relaxed" style={{ color: "var(--ink-2)" }}>{f.detail}</p>
+                  {f.actions
+                    ?.filter((a) => a.department === type)
+                    .map((a, j) => (
+                      <p
+                        key={j}
+                        className="text-xs mt-2 leading-relaxed pl-3"
+                        style={{ color: "var(--ink)", borderLeft: "2px solid var(--accent)" }}
+                      >
+                        <span className="font-semibold">Suggested: </span>
+                        {a.text}
+                      </p>
+                    ))}
                   {f.caveat && (
                     <p className="text-xs mt-1.5 leading-relaxed" style={{ color: "var(--ink-3)" }}>
                       Limit: {f.caveat}

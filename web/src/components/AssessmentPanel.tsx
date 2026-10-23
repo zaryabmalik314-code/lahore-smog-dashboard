@@ -55,6 +55,23 @@ export default function AssessmentPanel({ assessment }: { assessment: Assessment
               <p className="text-xs mt-1.5 leading-relaxed" style={{ color: "var(--ink-2)" }}>
                 {f.detail}
               </p>
+              {f.actions && f.actions.length > 0 && (
+                <ul className="mt-2.5 space-y-1.5">
+                  {f.actions.map((a, j) => (
+                    <li key={j} className="grid grid-cols-[auto_minmax(0,1fr)] gap-2.5 items-baseline">
+                      <span
+                        className="text-[9px] font-bold uppercase tracking-wider whitespace-nowrap"
+                        style={{ color: "var(--accent)" }}
+                      >
+                        {a.owner}
+                      </span>
+                      <span className="text-xs leading-relaxed" style={{ color: "var(--ink-2)" }}>
+                        {a.text}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
               {f.caveat && (
                 <p className="text-xs mt-1.5 leading-relaxed" style={{ color: "var(--ink-3)" }}>
                   Limit: {f.caveat}

@@ -3,6 +3,14 @@ import type { Outlook } from "./outlook";
 
 export type Severity = "critical" | "warning" | "info";
 
+export interface Action {
+  /** Department tab id this is addressed to. */
+  department: string;
+  /** The body that would carry it out, in its own name. */
+  owner: string;
+  text: string;
+}
+
 export interface Finding {
   id: string;
   severity: Severity;
@@ -13,6 +21,12 @@ export interface Finding {
   departments: string[];
   /** What this network cannot establish about the finding. */
   caveat?: string;
+  /**
+   * Suggested next steps. These are prompts for the responsible body, framed
+   * as the threshold at which a measure is normally considered — not an
+   * instruction, and not a claim about what policy requires.
+   */
+  actions?: Action[];
 }
 
 export interface Assessment {
@@ -80,6 +94,14 @@ export function assess(data: DashboardData, outlook: Outlook): Assessment {
         departments: ["health", "safecity", "environment"],
         caveat:
           "Projection assumes the last few hours continue. It does not account for wind shift, rainfall or an inversion breaking, any of which can reverse it within the hour.",
+        actions: [
+          { department: "health", owner: "Health & Population",
+            text: `Alert respiratory OPDs near ${top?.station_name ?? "the rising stations"} ahead of the projected peak rather than after it, and confirm nebuliser and oxygen stock.` },
+          { department: "safecity", owner: "Punjab Safe City Authority",
+            text: `Prioritise enforcement patrols toward ${top?.station_name ?? "the fastest-rising station"} while the trend holds; a rising station is where a measure changes the most.` },
+          { department: "environment", owner: "Punjab EPA",
+            text: "Verify the rise against an accredited instrument before it is cited publicly, since two of the network's stations are low-cost sensors." },
+        ],
       });
       basis.push(`Trend fitted over ${Math.max(...outlook.stations.map((s) => s.basis_hours))} hourly points.`);
     } else if (outlook.city_direction === "improving") {
@@ -118,6 +140,12 @@ export function assess(data: DashboardData, outlook: Outlook): Assessment {
         departments: ["safecity", "environment"],
         caveat:
           "With this few stations the gradient between them is unmeasured; the spread describes the monitored points only.",
+        actions: [
+          { department: "safecity", owner: "Punjab Safe City Authority",
+            text: `Target the area around ${high.station_name} rather than issuing a city-wide measure; the ${gap}-point gap says the problem is local.` },
+          { department: "environment", owner: "Punjab EPA / Urban Unit",
+            text: `Site an additional monitor between ${high.station_name} and ${low.station_name}. The gradient across that gap is currently unmeasured and is where the source sits.` },
+        ],
       });
     } else {
       findings.push({
@@ -148,6 +176,21 @@ export function assess(data: DashboardData, outlook: Outlook): Assessment {
       departments: coarse ? ["agriculture", "environment", "safecity"] : ["environment", "safecity"],
       caveat:
         "The ratio narrows the likely source class. It cannot attribute a reading to a specific source without satellite fire detection, wind modelling and an emissions inventory.",
+      actions: coarse
+        ? [
+            { department: "agriculture", owner: "Agriculture Department",
+              text: "Cross-check against NASA FIRMS fire detections for the district before attributing this to crop residue; the ratio alone cannot separate burning from road and construction dust." },
+            { department: "safecity", owner: "Punjab Safe City Authority",
+              text: "Check construction and unpaved-road activity near the leading stations, which produce the same coarse signature as burning." },
+            { department: "environment", owner: "Punjab EPA",
+              text: "A coarse-dominant episode responds to dust suppression and site controls, which a vehicle measure will not address." },
+          ]
+        : [
+            { department: "environment", owner: "Punjab EPA",
+              text: "A fine-dominant episode points at combustion, so vehicle and industrial controls are the levers that bite; dust suppression will not move it." },
+            { department: "safecity", owner: "Punjab Safe City Authority",
+              text: "Traffic measures are the applicable lever in this composition. Weigh them against the odd-even threshold below." },
+          ],
     });
   }
 
@@ -163,6 +206,12 @@ export function assess(data: DashboardData, outlook: Outlook): Assessment {
         departments: ["environment", "health"],
         caveat:
           "These are instantaneous readings screened against a 24-hour standard. A compliance finding requires a full 24-hour average from an accredited instrument.",
+        actions: [
+          { department: "environment", owner: "Punjab EPA",
+            text: "Begin a 24-hour accredited average at the exceeding stations if an enforcement case is intended; screening readings will not support one." },
+          { department: "health", owner: "Health & Population",
+            text: `At ${pm25Avg} µg/m³ the exposure guidance for children, the elderly and respiratory patients applies continuously, not only at peak hours.` },
+        ],
       });
     }
   }
@@ -177,6 +226,13 @@ export function assess(data: DashboardData, outlook: Outlook): Assessment {
         `Every figure here is computed from the ${data.reporting_count} station${data.reporting_count === 1 ? "" : "s"} that published within the last six hours. ` +
         "A station that has stopped reporting is excluded rather than carried forward, so coverage is narrower than the station list suggests.",
       departments: ["environment"],
+      actions: [
+        {
+          department: "environment",
+          owner: "Punjab EPA / Urban Unit",
+          text: "Restore or formally decommission the silent station. A monitor that is listed but not reporting narrows coverage invisibly to anyone reading only the station count.",
+        },
+      ],
     });
   }
 
