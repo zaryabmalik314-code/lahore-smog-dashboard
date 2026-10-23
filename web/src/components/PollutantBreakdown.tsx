@@ -8,12 +8,12 @@ interface PollutantBreakdownProps {
 }
 
 const POLLUTANTS = [
-  { key: "pm25" as const, name: "PM2.5", limit: 15, unit: "ug/m3", who: "WHO 24hr", color: "#ef4444" },
-  { key: "pm10" as const, name: "PM10", limit: 45, unit: "ug/m3", who: "WHO 24hr", color: "#f97316" },
-  { key: "no2" as const, name: "NO2", limit: 25, unit: "ug/m3", who: "WHO annual", color: "#eab308" },
-  { key: "so2" as const, name: "SO2", limit: 40, unit: "ug/m3", who: "WHO 24hr", color: "#a855f7" },
-  { key: "co" as const, name: "CO", limit: 4, unit: "mg/m3", who: "WHO 24hr", color: "#06b6d4" },
-  { key: "o3" as const, name: "O3", limit: 100, unit: "ug/m3", who: "WHO 8hr", color: "#22c55e" },
+  { key: "pm25" as const, name: "PM2.5", limit: 15, unit: "µg/m³", who: "24-hour", color: "#9e1414" },
+  { key: "pm10" as const, name: "PM10", limit: 45, unit: "µg/m³", who: "24-hour", color: "#d1500a" },
+  { key: "no2" as const, name: "NO₂", limit: 25, unit: "µg/m³", who: "annual", color: "#8a6500" },
+  { key: "so2" as const, name: "SO₂", limit: 40, unit: "µg/m³", who: "24-hour", color: "#6b21a8" },
+  { key: "co" as const, name: "CO", limit: 4, unit: "mg/m³", who: "24-hour", color: "#0f766e" },
+  { key: "o3" as const, name: "O₃", limit: 100, unit: "µg/m³", who: "8-hour", color: "#1a7f37" },
 ];
 
 /** Average across only the stations that actually report this pollutant. */
@@ -34,75 +34,93 @@ export default function PollutantBreakdown({ stations, measured }: PollutantBrea
   const maxVal = Math.max(...rows.map((r) => r.stat!.value), 1);
 
   return (
-    <div className="glass rounded-2xl p-5">
-      <div className="flex items-center justify-between mb-5">
-        <h3 className="text-sm font-medium text-zinc-300">Pollutant Levels vs WHO Limits</h3>
-        <span className="text-[10px] text-zinc-600 uppercase tracking-wider">Network Avg</span>
+    <section className="panel flex flex-col">
+      <div
+        className="px-5 py-3.5 flex items-baseline justify-between gap-4"
+        style={{ borderBottom: "1px solid var(--rule)" }}
+      >
+        <h3 className="text-sm font-semibold" style={{ color: "var(--ink)" }}>
+          Concentrations against WHO guidelines
+        </h3>
+        <span className="field-label">Network mean</span>
       </div>
 
-      {rows.length === 0 ? (
-        <p className="text-xs text-zinc-500 py-6 text-center">
-          No pollutant concentrations are being reported by the network right now.
-        </p>
-      ) : (
-        <div className="space-y-4">
-          {rows.map((p) => {
-            const { value, n } = p.stat!;
-            const pct = Math.min((value / maxVal) * 100, 100);
-            const limitPct = Math.min((p.limit / maxVal) * 100, 100);
-            const exceeds = value > p.limit;
+      <div className="p-5 flex-1">
+        {rows.length === 0 ? (
+          <p className="text-sm py-8 text-center" style={{ color: "var(--ink-3)" }}>
+            No pollutant concentrations are being reported by the network.
+          </p>
+        ) : (
+          <div className="space-y-5">
+            {rows.map((p) => {
+              const { value, n } = p.stat!;
+              const pct = Math.min((value / maxVal) * 100, 100);
+              const limitPct = Math.min((p.limit / maxVal) * 100, 100);
+              const exceeds = value > p.limit;
 
-            return (
-              <div key={p.key}>
-                <div className="flex items-center justify-between mb-1.5">
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-xs font-medium text-zinc-400">{p.name}</span>
-                    <span className="text-[9px] text-zinc-600">{n} station{n === 1 ? "" : "s"}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className={`text-xs font-bold tabular-nums ${exceeds ? "text-red-400" : "text-zinc-300"}`}>
-                      {value}
-                    </span>
-                    <span className="text-[10px] text-zinc-600">{p.unit}</span>
-                    {exceeds && (
-                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 font-semibold">
-                        {Math.round(value / p.limit)}x
+              return (
+                <div key={p.key}>
+                  <div className="flex items-baseline justify-between gap-3 mb-2">
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-sm font-semibold" style={{ color: "var(--ink)" }}>
+                        {p.name}
                       </span>
-                    )}
+                      <span className="text-[10px]" style={{ color: "var(--ink-3)" }}>
+                        {n} station{n === 1 ? "" : "s"}
+                      </span>
+                    </div>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-sm font-bold tabular" style={{ color: "var(--ink)" }}>
+                        {value}
+                      </span>
+                      <span className="text-[10px]" style={{ color: "var(--ink-3)" }}>{p.unit}</span>
+                      {exceeds && (
+                        <span
+                          className="text-[10px] font-bold tabular"
+                          style={{ color: "var(--aqi-unhealthy-ink)" }}
+                        >
+                          {Math.round(value / p.limit)}× limit
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="relative h-3" style={{ background: "var(--paper-sunk)" }}>
+                    <div
+                      className="h-full"
+                      style={{ width: `${pct}%`, background: p.color }}
+                      title={`${p.name}: ${value} ${p.unit}`}
+                    />
+                    <div
+                      className="absolute top-0 h-full"
+                      style={{
+                        left: `${limitPct}%`,
+                        width: "2px",
+                        background: "var(--ink)",
+                        marginLeft: "-1px",
+                      }}
+                      title={`WHO ${p.who} guideline: ${p.limit} ${p.unit}`}
+                    />
                   </div>
                 </div>
-                <div className="relative h-2 bg-zinc-800/50 rounded-full overflow-hidden">
-                  <div
-                    className="h-full rounded-full transition-all duration-700"
-                    style={{
-                      width: `${pct}%`,
-                      background: `linear-gradient(90deg, ${p.color}cc, ${p.color})`,
-                      boxShadow: exceeds ? `0 0 8px ${p.color}40` : "none",
-                    }}
-                  />
-                  <div
-                    className="absolute top-0 h-full w-px"
-                    style={{ left: `${limitPct}%`, background: "#ffffff30" }}
-                    title={`WHO ${p.who}: ${p.limit} ${p.unit}`}
-                  />
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-4 pt-3 border-t border-zinc-800/30">
-        <div className="flex items-center gap-1.5">
-          <div className="w-4 h-0.5 bg-white/20" />
-          <span className="text-[10px] text-zinc-600">WHO safe limit</span>
-        </div>
-        {notMeasured.length > 0 && (
-          <span className="text-[10px] text-zinc-600">
-            Not measured by this network: {notMeasured.join(", ")}
-          </span>
+              );
+            })}
+          </div>
         )}
       </div>
-    </div>
+
+      <div className="px-5 py-3" style={{ borderTop: "1px solid var(--rule)", background: "var(--paper-sunk)" }}>
+        <div className="flex items-center gap-2 mb-1.5">
+          <span style={{ width: "2px", height: "11px", background: "var(--ink)" }} />
+          <span className="text-[11px]" style={{ color: "var(--ink-2)" }}>
+            WHO guideline value
+          </span>
+        </div>
+        {notMeasured.length > 0 && (
+          <p className="text-[11px]" style={{ color: "var(--ink-3)" }}>
+            Not measured by this network: {notMeasured.join(", ")}.
+          </p>
+        )}
+      </div>
+    </section>
   );
 }

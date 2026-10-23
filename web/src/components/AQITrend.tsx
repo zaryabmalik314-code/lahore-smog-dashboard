@@ -21,25 +21,28 @@ export default function AQITrend({ data, enabled }: AQITrendProps) {
   const hasEnough = data.length >= 2;
 
   return (
-    <div className="glass rounded-2xl p-5">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-medium text-zinc-300">24-Hour AQI Trend</h3>
-        <span className="text-[10px] text-zinc-600 uppercase tracking-wider">
-          {hasEnough ? `${data.length} hourly points` : "City Average"}
-        </span>
+    <section className="panel">
+      <div
+        className="px-5 py-3.5 flex items-baseline justify-between gap-4"
+        style={{ borderBottom: "1px solid var(--rule)" }}
+      >
+        <h3 className="text-sm font-semibold" style={{ color: "var(--ink)" }}>
+          Network average, past 24 hours
+        </h3>
+        {hasEnough && <span className="field-label">{data.length} hourly points</span>}
       </div>
 
+      <div className="p-5">
       {!hasEnough ? (
         <div className="h-[260px] flex flex-col items-center justify-center text-center px-6">
-          <div className="w-10 h-10 rounded-full border-2 border-zinc-800 border-t-zinc-600 animate-spin mb-4" />
-          <p className="text-sm text-zinc-400">Building history</p>
-          <p className="text-xs text-zinc-600 mt-1.5 max-w-xs leading-relaxed">
+          <p className="text-sm font-medium" style={{ color: "var(--ink-2)" }}>
+            Insufficient history
+          </p>
+          <p className="text-xs mt-2 max-w-xs leading-relaxed" style={{ color: "var(--ink-3)" }}>
             {enabled
               ? `Readings are recorded as stations publish them. ${
-                  data.length === 0
-                    ? "No hours stored yet"
-                    : "1 hour stored so far"
-                } — the trend appears once at least two hours are on record.`
+                  data.length === 0 ? "No hours are stored yet" : "One hour is stored so far"
+                } — this chart is drawn once at least two hours are on record.`
               : "History storage is not configured, so no trend can be shown."}
           </p>
         </div>
@@ -48,67 +51,69 @@ export default function AQITrend({ data, enabled }: AQITrendProps) {
           <AreaChart data={data}>
             <defs>
               <linearGradient id="aqiGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#ef4444" stopOpacity={0.25} />
-                <stop offset="50%" stopColor="#ef4444" stopOpacity={0.08} />
-                <stop offset="100%" stopColor="#ef4444" stopOpacity={0} />
+                <stop offset="0%" stopColor="#9e1414" stopOpacity={0.16} />
+                <stop offset="100%" stopColor="#9e1414" stopOpacity={0.01} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#18181b" vertical={false} />
+            <CartesianGrid stroke="var(--rule)" vertical={false} />
             <XAxis
               dataKey="time"
-              stroke="#3f3f46"
-              fontSize={10}
+              stroke="var(--ink-3)"
+              fontSize={11}
               tickLine={false}
-              axisLine={false}
+              axisLine={{ stroke: "var(--rule-strong)" }}
               interval="preserveStartEnd"
+              dy={4}
             />
             <YAxis
-              stroke="#3f3f46"
-              fontSize={10}
+              stroke="var(--ink-3)"
+              fontSize={11}
               tickLine={false}
               axisLine={false}
               domain={[0, "auto"]}
-              width={35}
+              width={38}
             />
             <Tooltip
+              cursor={{ stroke: "var(--ink-3)", strokeWidth: 1 }}
               contentStyle={{
-                backgroundColor: "#0c0c10",
-                border: "1px solid #27272a",
-                borderRadius: "10px",
+                backgroundColor: "var(--paper-raised)",
+                border: "1px solid var(--rule-strong)",
+                borderRadius: "2px",
                 fontSize: "12px",
-                color: "#f4f4f5",
-                boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
+                color: "var(--ink)",
+                boxShadow: "0 2px 8px rgba(0,0,0,0.10)",
               }}
-              labelStyle={{ color: "#71717a", fontSize: "10px" }}
+              labelStyle={{ color: "var(--ink-3)", fontSize: "11px", marginBottom: 2 }}
               formatter={(value, _name, item) => [
-                `${value} AQI (${item?.payload?.samples ?? 0} stations)`,
+                `${value} AQI · ${item?.payload?.samples ?? 0} station${item?.payload?.samples === 1 ? "" : "s"}`,
                 "Network average",
               ]}
             />
             <ReferenceLine
               y={150}
-              stroke="#f9731640"
-              strokeDasharray="6 4"
-              label={{ value: "Unhealthy", fill: "#f9731660", fontSize: 9, position: "right" }}
+              stroke="var(--aqi-unhealthy-sensitive)"
+              strokeDasharray="4 4"
+              label={{ value: "Unhealthy 150", fill: "var(--aqi-unhealthy-sensitive-ink)", fontSize: 10, position: "insideTopRight" }}
             />
             <ReferenceLine
               y={300}
-              stroke="#ef444440"
-              strokeDasharray="6 4"
-              label={{ value: "Hazardous", fill: "#ef444460", fontSize: 9, position: "right" }}
+              stroke="var(--aqi-very-unhealthy)"
+              strokeDasharray="4 4"
+              label={{ value: "Hazardous 300", fill: "var(--aqi-very-unhealthy-ink)", fontSize: 10, position: "insideTopRight" }}
             />
             <Area
               type="monotone"
               dataKey="aqi"
-              stroke="#ef4444"
+              stroke="#9e1414"
               fill="url(#aqiGradient)"
               strokeWidth={2}
               dot={false}
-              activeDot={{ r: 4, fill: "#ef4444", stroke: "#0c0c10", strokeWidth: 2 }}
+              activeDot={{ r: 4, fill: "#9e1414", stroke: "var(--paper-raised)", strokeWidth: 2 }}
             />
           </AreaChart>
         </ResponsiveContainer>
       )}
-    </div>
+      </div>
+    </section>
   );
 }

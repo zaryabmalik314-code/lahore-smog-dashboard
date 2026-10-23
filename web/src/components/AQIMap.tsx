@@ -3,42 +3,35 @@
 import { useEffect, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { AQI_COLORS, AQI_LABELS, type Station } from "@/lib/types";
+import { AQI_COLORS, AQI_INK, AQI_LABELS, SOURCE_TIER_LABELS, type Station } from "@/lib/types";
 
 interface AQIMapProps {
   stations: Station[];
 }
 
 function createMarkerIcon(aqi: number | null, category: string): L.DivIcon {
-  const color = AQI_COLORS[category as keyof typeof AQI_COLORS] || "#71717a";
+  const color = AQI_COLORS[category as keyof typeof AQI_COLORS] || "#8b8b84";
+  // Moderate's fill is too light to carry white text; switch to dark ink there.
+  const textColor = category === "moderate" ? "#2a1f00" : "#ffffff";
   return L.divIcon({
     className: "",
-    html: `<div style="position:relative;">
-      <div style="
-        position:absolute; top:-6px; left:-6px;
-        width:52px; height:52px; border-radius:50%;
-        background:${color}15;
-        animation: pulse-glow 3s infinite;
-      "></div>
-      <div style="
-        position:relative;
-        background: linear-gradient(135deg, ${color}, ${color}cc);
-        color: white;
+    html: `<div style="
+        background: ${color};
+        color: ${textColor};
         font-weight: 700;
         font-size: 13px;
-        width: 40px;
-        height: 40px;
-        border-radius: 50%;
+        width: 36px;
+        height: 36px;
         display: flex;
         align-items: center;
         justify-content: center;
-        border: 2px solid ${color}40;
-        box-shadow: 0 4px 16px ${color}40, inset 0 1px 0 rgba(255,255,255,0.15);
-        font-family: system-ui;
-      ">${aqi ?? "?"}</div>
-    </div>`,
-    iconSize: [40, 40],
-    iconAnchor: [20, 20],
+        border: 2px solid #ffffff;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.35);
+        font-variant-numeric: tabular-nums;
+        font-family: system-ui, sans-serif;
+      ">${aqi ?? "?"}</div>`,
+    iconSize: [36, 36],
+    iconAnchor: [18, 18],
   });
 }
 
@@ -55,14 +48,23 @@ export default function AQIMap({ stations }: AQIMapProps) {
 
     L.control.zoom({ position: "bottomright" }).addTo(map);
 
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-      attribution: '&copy; OpenStreetMap',
+    // OSM standard tiles need no API key. They are desaturated in CSS so the
+    // basemap stays recessive and the AQI markers carry the only strong colour.
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "&copy; OpenStreetMap contributors",
       maxZoom: 18,
     }).addTo(map);
 
     mapInstanceRef.current = map;
 
+    // Leaflet caches the container size at init. If the panel is still settling
+    // (fonts, fade-in, responsive reflow) it tiles only the area it measured,
+    // so re-measure whenever the container's box actually changes.
+    const observer = new ResizeObserver(() => map.invalidateSize());
+    observer.observe(mapRef.current);
+
     return () => {
+      observer.disconnect();
       map.remove();
       mapInstanceRef.current = null;
     };
@@ -81,32 +83,26 @@ export default function AQIMap({ stations }: AQIMapProps) {
         icon: createMarkerIcon(station.aqi, station.category),
       });
 
-      const color = AQI_COLORS[station.category];
+      const ink = AQI_INK[station.category];
+      const cell = (label: string, value: string) => `
+        <div style="padding: 5px 7px; background: #f4f4f1; border: 1px solid #dcdcd6;">
+          <span style="color: #6b7280; display: block; font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase; font-weight: 600;">${label}</span>
+          <span style="color: #16181d; font-weight: 600; font-variant-numeric: tabular-nums;">${value}</span>
+        </div>`;
+
       marker.bindPopup(`
-        <div style="font-family: system-ui; min-width: 200px;">
-          <div style="font-size: 14px; font-weight: 600; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid #27272a;">${station.name}</div>
-          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
-            <span style="font-size: 28px; font-weight: 700; color: ${color}; line-height: 1;">${station.aqi ?? "—"}</span>
-            <span style="font-size: 10px; padding: 2px 6px; border-radius: 4px; background: ${color}20; color: ${color}; font-weight: 600; text-transform: uppercase;">${AQI_LABELS[station.category]}</span>
+        <div style="font-family: system-ui, sans-serif; min-width: 210px;">
+          <div style="font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #6b7280; font-weight: 600;">${SOURCE_TIER_LABELS[station.tier]} station</div>
+          <div style="font-size: 14px; font-weight: 600; color: #16181d; margin-top: 2px; padding-bottom: 8px; border-bottom: 1px solid #dcdcd6;">${station.name.replace(/, Pakistan$/, "")}</div>
+          <div style="display: flex; align-items: baseline; gap: 8px; margin: 10px 0;">
+            <span style="font-size: 30px; font-weight: 700; color: ${ink}; line-height: 1; font-variant-numeric: tabular-nums;">${station.aqi ?? "—"}</span>
+            <span style="font-size: 11px; color: ${ink}; font-weight: 600;">${AQI_LABELS[station.category]}</span>
           </div>
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 11px;">
-            <div style="padding: 4px 6px; background: #111; border-radius: 4px;">
-              <span style="color: #666; display: block; font-size: 9px; text-transform: uppercase;">PM2.5</span>
-              <span style="color: #ddd; font-weight: 600;">${station.pm25 ?? "—"} ug/m3</span>
-            </div>
-            <div style="padding: 4px 6px; background: #111; border-radius: 4px;">
-              <span style="color: #666; display: block; font-size: 9px; text-transform: uppercase;">PM10</span>
-              <span style="color: #ddd; font-weight: 600;">${station.pm10 ?? "—"} ug/m3</span>
-            </div>
-            <div style="padding: 4px 6px; background: #111; border-radius: 4px;">
-              <span style="color: #666; display: block; font-size: 9px; text-transform: uppercase;">Temp</span>
-              <span style="color: #ddd; font-weight: 600;">${station.temperature ?? "—"} C</span>
-            </div>
-            <div style="padding: 4px 6px; background: #111; border-radius: 4px;">
-              <span style="color: #666; display: block; font-size: 9px; text-transform: uppercase;">Wind</span>
-              <span style="color: #ddd; font-weight: 600;">${station.wind_speed ?? "—"} m/s</span>
-            </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px; font-size: 11px;">
+            ${cell("PM2.5", station.pm25 != null ? `${station.pm25} µg/m³` : "no sensor")}
+            ${cell("PM10", station.pm10 != null ? `${station.pm10} µg/m³` : "no sensor")}
           </div>
+          <div style="margin-top: 8px; font-size: 10px; color: #6b7280;">${station.attribution}</div>
         </div>
       `);
 
@@ -114,5 +110,5 @@ export default function AQIMap({ stations }: AQIMapProps) {
     });
   }, [stations]);
 
-  return <div ref={mapRef} className="w-full h-[450px] rounded-xl" />;
+  return <div ref={mapRef} className="w-full h-[420px]" />;
 }

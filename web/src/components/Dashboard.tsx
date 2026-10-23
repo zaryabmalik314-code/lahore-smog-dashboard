@@ -7,7 +7,7 @@ import StationTable from "./StationTable";
 import AQITrend from "./AQITrend";
 import PollutantBreakdown from "./PollutantBreakdown";
 import type { DashboardData, SourceTier, TrendPoint } from "@/lib/types";
-import { getAQICategory, AQI_COLORS, AQI_LABELS, SOURCE_TIER_LABELS } from "@/lib/types";
+import { getAQICategory, AQI_COLORS, AQI_INK, AQI_LABELS, SOURCE_TIER_LABELS } from "@/lib/types";
 
 const AQIMap = dynamic(() => import("./AQIMap"), { ssr: false });
 
@@ -31,7 +31,7 @@ function getSmogAdvisories(data: DashboardData) {
     advisories.push({ icon: "SCHOOL", title: "School Closure Advisory", detail: "AQI exceeds 300. Punjab govt protocol requires closure of all primary schools.", severity: "critical" });
   }
   if (avg > 200) {
-    advisories.push({ icon: "MASK", title: "N95 Mask Advisory", detail: `PM2.5 at ${worstPm25} ug/m3 — ${Math.round(worstPm25 / 15)}x WHO safe limit. N95 masks recommended for all outdoor activity.`, severity: "critical" });
+    advisories.push({ icon: "MASK", title: "N95 Mask Advisory", detail: `Peak PM2.5 at ${worstPm25} µg/m³ — ${Math.round(worstPm25 / 15)}× the WHO guideline. N95 masks recommended for all outdoor activity.`, severity: "critical" });
   }
   if (borderStation && (borderStation.aqi || 0) > 200) {
     advisories.push({ icon: "BORDER", title: "Elevated Reading at Border Station", detail: `Wagha Border AQI at ${borderStation.aqi}. Source attribution requires satellite fire data and wind modelling.`, severity: "warning" });
@@ -93,10 +93,20 @@ export default function Dashboard() {
     loadAqi();
     loadTrend();
 
+    const tick = () =>
+      setTime(
+        new Date().toLocaleTimeString("en-GB", {
+          timeZone: "Asia/Karachi",
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          hour12: false,
+        })
+      );
+    tick();
+
     const interval = setInterval(() => { loadAqi(); loadTrend(); }, 5 * 60 * 1000);
-    const clock = setInterval(() => {
-      setTime(new Date().toLocaleTimeString("en-PK", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }));
-    }, 1000);
+    const clock = setInterval(tick, 1000);
 
     return () => { clearInterval(interval); clearInterval(clock); };
   }, []);
@@ -104,20 +114,30 @@ export default function Dashboard() {
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen gap-4">
-        <div className="w-12 h-12 border-2 border-zinc-700 border-t-red-500 rounded-full animate-spin" />
-        <div className="text-zinc-500 text-sm">Loading air quality data...</div>
+        <div
+          className="w-8 h-8 border-2 rounded-full animate-spin"
+          style={{ borderColor: "var(--rule)", borderTopColor: "var(--ink-2)" }}
+        />
+        <div className="text-sm" style={{ color: "var(--ink-3)" }}>Retrieving station readings…</div>
       </div>
     );
   }
 
   if (error || !data) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen gap-3 px-6 text-center">
-        <div className="w-10 h-10 rounded-full bg-red-500/10 border border-red-500/30 flex items-center justify-center text-red-400 font-bold">!</div>
-        <div className="text-zinc-200 text-sm font-medium">Live data unavailable</div>
-        <div className="text-zinc-500 text-xs max-w-sm leading-relaxed">
-          {error || "No monitoring data could be retrieved."} No readings are shown rather than
-          displaying values that cannot be verified.
+      <div className="flex items-center justify-center min-h-screen px-6">
+        <div className="panel max-w-md p-8 rule-top">
+          <p className="field-label">Notice</p>
+          <h1 className="text-xl font-semibold mt-2" style={{ color: "var(--ink)" }}>
+            Live data unavailable
+          </h1>
+          <p className="text-sm mt-3 leading-relaxed" style={{ color: "var(--ink-2)" }}>
+            {error || "No monitoring data could be retrieved."}
+          </p>
+          <p className="text-sm mt-3 leading-relaxed" style={{ color: "var(--ink-3)" }}>
+            No readings are displayed rather than values that cannot be verified against a
+            source station.
+          </p>
         </div>
       </div>
     );
@@ -126,74 +146,120 @@ export default function Dashboard() {
   const advisory = getHealthAdvisory(data.city_avg_aqi);
   const category = getAQICategory(data.city_avg_aqi);
   const accentColor = AQI_COLORS[category];
+  const inkColor = AQI_INK[category];
+
+  const issued = new Date(data.last_updated);
+  const reference = `LAQ-${issued.getUTCFullYear()}${String(issued.getUTCMonth() + 1).padStart(2, "0")}${String(issued.getUTCDate()).padStart(2, "0")}-${String(issued.getUTCHours()).padStart(2, "0")}${String(issued.getUTCMinutes()).padStart(2, "0")}`;
 
   return (
     <div className="min-h-screen">
-      {/* Emergency Banner */}
-      {data.city_avg_aqi > 200 && (
-        <div
-          className="px-4 py-2.5 text-center text-sm font-medium"
-          style={{ background: `linear-gradient(90deg, ${advisory.color}15, ${advisory.color}25, ${advisory.color}15)`, borderBottom: `1px solid ${advisory.color}30` }}
-        >
-          <span className="inline-flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: advisory.color }} />
-            <span style={{ color: advisory.color }}>{advisory.level} ALERT</span>
-            <span className="text-zinc-400 hidden sm:inline">— {advisory.action}</span>
-          </span>
+      {/* Masthead */}
+      <div style={{ background: "var(--masthead)" }}>
+        <div className="max-w-[1180px] mx-auto px-5 sm:px-8 py-3 flex items-center justify-between gap-4">
+          <p
+            className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-[0.14em]"
+            style={{ color: "#c3cad6" }}
+          >
+            Lahore Air Quality Monitoring
+          </p>
+          <div className="flex items-center gap-4 shrink-0">
+            <span className="hidden sm:inline text-[10px] uppercase tracking-[0.1em]" style={{ color: "#8d98a8" }}>
+              Ref {reference}
+            </span>
+            <span className="font-mono text-xs tabular" style={{ color: "#e4e8ee" }}>
+              {time} <span style={{ color: "#8d98a8" }}>PKT</span>
+            </span>
+          </div>
         </div>
-      )}
+      </div>
 
-      {/* Header */}
-      <header className="border-b border-zinc-800/50 bg-zinc-950/80 backdrop-blur-xl sticky top-0 z-50">
-        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-lg" style={{ background: `${accentColor}15`, color: accentColor, border: `1px solid ${accentColor}30` }}>
-                LH
+      {/* Title block */}
+      <header style={{ background: "var(--paper-raised)", borderBottom: `1px solid var(--rule)` }}>
+        <div className="max-w-[1180px] mx-auto px-5 sm:px-8 pt-7 pb-0">
+          <div className="flex items-end justify-between gap-6 flex-wrap">
+            <div>
+              <h1
+                className="text-[26px] sm:text-[32px] leading-none font-bold tracking-tight"
+                style={{ fontFamily: "var(--font-masthead), Georgia, serif", color: "var(--ink)" }}
+              >
+                Lahore Air Quality Bulletin
+              </h1>
+              <p className="text-sm mt-2.5 max-w-xl leading-relaxed" style={{ color: "var(--ink-2)" }}>
+                Readings aggregated from the Punjab air quality network and independent
+                monitoring stations across the Lahore district.
+              </p>
+            </div>
+            <dl className="flex gap-7 pb-1">
+              <div>
+                <dt className="field-label">Issued</dt>
+                <dd className="text-sm mt-1 tabular" style={{ color: "var(--ink)" }}>
+                  {issued.toLocaleString("en-GB", {
+                    timeZone: "Asia/Karachi",
+                    day: "2-digit",
+                    month: "short",
+                    year: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    hour12: false,
+                  })}
+                </dd>
               </div>
               <div>
-                <h1 className="text-lg font-semibold text-zinc-100 tracking-tight">
-                  Lahore Smog Dashboard
-                </h1>
-                <p className="text-xs text-zinc-500">
-                  Punjab Environmental Monitoring Network
-                </p>
+                <dt className="field-label">Stations</dt>
+                <dd className="text-sm mt-1 tabular" style={{ color: "var(--ink)" }}>
+                  {data.reporting_count} of {data.stations.length} reporting
+                </dd>
               </div>
-            </div>
-            <div className="flex items-center gap-5">
-              <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800">
-                <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" style={{ animation: "pulse-glow 2s infinite" }} />
-                <span className="text-xs text-zinc-400">LIVE</span>
-              </div>
-              <div className="text-right">
-                <div className="text-sm font-mono text-zinc-300 tabular-nums">{time}</div>
-                <div className="text-[10px] text-zinc-600">PKT (UTC+5)</div>
-              </div>
-            </div>
+            </dl>
           </div>
 
-          {/* Tabs */}
-          <nav className="flex gap-0.5 mt-4 -mb-4 overflow-x-auto">
-            {TABS.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`px-4 py-2.5 text-sm font-medium rounded-t-lg transition-all whitespace-nowrap ${
-                  activeTab === tab.id
-                    ? "bg-zinc-900 text-zinc-100"
-                    : "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900/50"
-                }`}
-                style={activeTab === tab.id ? { borderBottom: `2px solid ${accentColor}` } : {}}
-              >
-                {tab.label}
-              </button>
-            ))}
+          {/* Section tabs */}
+          <nav className="flex gap-6 mt-6 overflow-x-auto no-print" aria-label="Bulletin sections">
+            {TABS.map((tab) => {
+              const active = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  aria-current={active ? "page" : undefined}
+                  className="pb-3 text-sm whitespace-nowrap transition-colors"
+                  style={{
+                    color: active ? "var(--ink)" : "var(--ink-3)",
+                    fontWeight: active ? 600 : 450,
+                    borderBottom: active ? "2px solid var(--ink)" : "2px solid transparent",
+                    marginBottom: "-1px",
+                  }}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
           </nav>
         </div>
       </header>
 
+      {/* Standing advisory strip */}
+      {data.city_avg_aqi > 150 && (
+        <div
+          style={{
+            background: "var(--paper-sunk)",
+            borderBottom: `1px solid var(--rule)`,
+            borderLeft: `4px solid ${accentColor}`,
+          }}
+        >
+          <div className="max-w-[1180px] mx-auto px-5 sm:px-8 py-2.5 flex items-baseline gap-3 flex-wrap">
+            <span className="text-xs font-bold uppercase tracking-wider" style={{ color: inkColor }}>
+              {advisory.level}
+            </span>
+            <span className="text-xs" style={{ color: "var(--ink-2)" }}>
+              {advisory.action} — network average AQI {data.city_avg_aqi}
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Main Content */}
-      <main className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6">
+      <main className="max-w-[1180px] mx-auto px-5 sm:px-8 py-7">
         {activeTab === "overview" && <OverviewTab data={data} trend={trend} advisory={advisory} />}
         {activeTab === "health" && <DepartmentTab type="health" data={data} />}
         {activeTab === "agriculture" && <DepartmentTab type="agriculture" data={data} />}
@@ -202,83 +268,111 @@ export default function Dashboard() {
       </main>
 
       {/* Footer — data provenance */}
-      <footer className="border-t border-zinc-800/50 py-5 px-6">
-        <div className="max-w-[1400px] mx-auto">
-          <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-2.5">Data Sources</p>
-          <div className="flex flex-wrap gap-x-5 gap-y-1.5 mb-3">
-            {data.sources.map((s) => (
-              <span key={s.attribution} className="text-[11px] text-zinc-400 flex items-center gap-1.5">
-                <TierDot tier={s.tier} />
-                {s.attribution}
-                <span className="text-zinc-600">
-                  ({s.station_count} station{s.station_count === 1 ? "" : "s"})
-                </span>
-              </span>
-            ))}
+      <footer style={{ borderTop: `1px solid var(--rule)`, background: "var(--paper-sunk)" }}>
+        <div className="max-w-[1180px] mx-auto px-5 sm:px-8 py-7">
+          <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] gap-7">
+            <div>
+              <p className="field-label">Data sources</p>
+              <ul className="mt-2.5 space-y-1.5">
+                {data.sources.map((s) => (
+                  <li key={s.attribution} className="text-xs flex items-start gap-2" style={{ color: "var(--ink-2)" }}>
+                    <TierDot tier={s.tier} />
+                    <span>
+                      {s.attribution}
+                      <span style={{ color: "var(--ink-3)" }}>
+                        {" "}— {s.station_count} station{s.station_count === 1 ? "" : "s"}
+                      </span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div>
+              <p className="field-label">Basis of this bulletin</p>
+              <p className="text-xs mt-2.5 leading-relaxed" style={{ color: "var(--ink-2)" }}>
+                Readings are retrieved via the World Air Quality Index Project (waqi.info).
+                Aggregates are computed from the {data.reporting_count} station
+                {data.reporting_count === 1 ? "" : "s"} that reported within the preceding six hours
+                {data.excluded_count > 0 && (
+                  <>
+                    ; {data.excluded_count} station{data.excluded_count === 1 ? " is" : "s are"}{" "}
+                    excluded as not currently reporting
+                  </>
+                )}
+                . Categories follow the US EPA AQI scale.
+              </p>
+              <p className="text-xs mt-3 leading-relaxed" style={{ color: "var(--ink-3)" }}>
+                This bulletin is produced independently and is not an official publication of any
+                government department. Readings are indicative and are not a substitute for
+                accredited regulatory monitoring.
+              </p>
+            </div>
           </div>
-          <p className="text-[11px] text-zinc-600 leading-relaxed">
-            Retrieved via the World Air Quality Index Project (waqi.info). Aggregates are computed
-            from {data.reporting_count} station{data.reporting_count === 1 ? "" : "s"} reporting
-            within the last 6 hours
-            {data.excluded_count > 0 && (
-              <>
-                ; {data.excluded_count} station{data.excluded_count === 1 ? " is" : "s are"} excluded
-                as not currently reporting
-              </>
-            )}
-            . Last retrieved {new Date(data.last_updated).toLocaleString("en-PK", { timeZone: "Asia/Karachi" })} PKT.
-            Readings are indicative and are not a substitute for accredited regulatory monitoring.
-          </p>
         </div>
       </footer>
     </div>
   );
 }
 
-function AQIGauge({ value, size = 160 }: { value: number; size?: number }) {
+function AQIGauge({ value, size = 190 }: { value: number; size?: number }) {
   const category = getAQICategory(value);
   const color = AQI_COLORS[category];
-  const radius = (size - 20) / 2;
+  const ink = AQI_INK[category];
+  const radius = (size - 24) / 2;
   const circumference = Math.PI * radius;
+  // The EPA scale is open-ended above 500; clamp so the arc never overruns.
   const percent = Math.min(value / 500, 1);
   const offset = circumference * (1 - percent);
 
   return (
-    <div className="relative flex items-center justify-center" style={{ width: size, height: size / 2 + 30 }}>
-      <svg width={size} height={size / 2 + 10} viewBox={`0 0 ${size} ${size / 2 + 10}`}>
+    <div className="relative flex items-center justify-center" style={{ width: size, height: size / 2 + 42 }}>
+      <svg
+        width={size}
+        height={size / 2 + 12}
+        viewBox={`0 0 ${size} ${size / 2 + 12}`}
+        role="img"
+        aria-label={`Air quality index ${value}, ${AQI_LABELS[category]}`}
+      >
         <path
-          d={`M 10 ${size / 2} A ${radius} ${radius} 0 0 1 ${size - 10} ${size / 2}`}
+          d={`M 12 ${size / 2} A ${radius} ${radius} 0 0 1 ${size - 12} ${size / 2}`}
           fill="none"
-          stroke="#1a1a22"
-          strokeWidth="8"
-          strokeLinecap="round"
+          stroke="var(--rule)"
+          strokeWidth="10"
         />
         <path
-          d={`M 10 ${size / 2} A ${radius} ${radius} 0 0 1 ${size - 10} ${size / 2}`}
+          d={`M 12 ${size / 2} A ${radius} ${radius} 0 0 1 ${size - 12} ${size / 2}`}
           fill="none"
           stroke={color}
-          strokeWidth="8"
-          strokeLinecap="round"
+          strokeWidth="10"
           strokeDasharray={circumference}
           strokeDashoffset={offset}
           className="aqi-ring"
-          style={{ filter: `drop-shadow(0 0 8px ${color}60)` }}
         />
       </svg>
       <div className="absolute bottom-0 text-center">
-        <div className="text-4xl font-bold tabular-nums" style={{ color }}>{value}</div>
-        <div className="text-xs font-medium mt-0.5" style={{ color: color + "cc" }}>{AQI_LABELS[category]}</div>
+        <div className="text-[44px] leading-none font-bold tabular" style={{ color: ink }}>
+          {value}
+        </div>
+        <div className="text-xs font-semibold mt-1.5" style={{ color: ink }}>
+          {AQI_LABELS[category]}
+        </div>
       </div>
     </div>
   );
 }
 
+export const TIER_COLORS: Record<SourceTier, string> = {
+  official: "#1d4ed8",
+  citizen: "#0f766e",
+  reference: "#6b7280",
+};
+
 function TierDot({ tier }: { tier: SourceTier }) {
-  const color = tier === "official" ? "#34d399" : tier === "citizen" ? "#60a5fa" : "#a1a1aa";
   return (
     <span
-      className="w-1.5 h-1.5 rounded-full shrink-0"
-      style={{ background: color }}
+      className="w-1.5 h-1.5 rounded-full shrink-0 mt-1.5"
+      style={{ background: TIER_COLORS[tier] }}
       title={SOURCE_TIER_LABELS[tier]}
     />
   );
@@ -301,58 +395,73 @@ function OverviewTab({ data, trend, advisory }: {
   const pm25Avg = meanOf(reporting);
   const whoMultiple = pm25Avg !== null ? Math.round(pm25Avg / 15) : null;
 
+  const severityInk: Record<string, string> = {
+    critical: "var(--aqi-unhealthy-ink)",
+    warning: "var(--aqi-unhealthy-sensitive-ink)",
+    info: "#1d4ed8",
+  };
+
   return (
-    <div className="space-y-5 animate-slide-in">
-      {/* Hero: City AQI + Advisory */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="glass-bright rounded-2xl p-6 flex flex-col items-center justify-center">
-          <p className="text-xs text-zinc-500 mb-2 uppercase tracking-wider">City Average AQI</p>
-          <AQIGauge value={data.city_avg_aqi} />
-          {whoMultiple !== null && (
-            <p className="text-xs text-zinc-600 mt-2">
-              WHO PM2.5 exposure: <span className="text-zinc-300 font-semibold">{whoMultiple}x</span> safe limit
-            </p>
-          )}
-          <p className="text-[10px] text-zinc-700 mt-1">
+    <div className="space-y-6 animate-fade-in">
+      {/* Summary: City AQI + Advisory */}
+      <section className="grid grid-cols-1 lg:grid-cols-[300px_minmax(0,1fr)] gap-5">
+        <div className="panel rule-top p-6 flex flex-col items-center justify-center text-center">
+          <p className="field-label">Network average AQI</p>
+          <div className="mt-3">
+            <AQIGauge value={data.city_avg_aqi} />
+          </div>
+          <p className="text-xs" style={{ color: "var(--ink-3)" }}>
             Mean of {data.reporting_count} reporting station{data.reporting_count === 1 ? "" : "s"}
           </p>
-        </div>
-
-        <div className="lg:col-span-2 glass rounded-2xl p-6">
-          <div className="flex items-start gap-3 mb-4">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-sm font-bold" style={{ background: advisory.color + "20", color: advisory.color }}>
-              !
-            </div>
-            <div>
-              <h3 className="text-sm font-semibold text-zinc-200">{advisory.level} — {advisory.action}</h3>
-              <p className="text-sm text-zinc-400 mt-1 leading-relaxed">{advisory.message}</p>
-            </div>
-          </div>
-
-          {smogAdvisories.length > 0 && (
-            <div className="space-y-2 mt-4 pt-4 border-t border-zinc-800/50">
-              {smogAdvisories.slice(0, 4).map((adv, i) => (
-                <div key={i} className="flex items-start gap-3 py-1.5">
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold shrink-0 ${
-                    adv.severity === "critical" ? "bg-red-500/10 text-red-400" :
-                    adv.severity === "warning" ? "bg-amber-500/10 text-amber-400" :
-                    "bg-blue-500/10 text-blue-400"
-                  }`}>
-                    {adv.icon}
-                  </span>
-                  <div>
-                    <span className="text-xs font-medium text-zinc-300">{adv.title}</span>
-                    <span className="text-xs text-zinc-500 ml-2">{adv.detail}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
+          {whoMultiple !== null && (
+            <p className="text-xs mt-2 pt-2.5 w-full" style={{ color: "var(--ink-2)", borderTop: "1px solid var(--rule)" }}>
+              PM2.5 at{" "}
+              <span className="font-semibold" style={{ color: "var(--ink)" }}>{whoMultiple}×</span>{" "}
+              the WHO 24-hour guideline
+            </p>
           )}
         </div>
-      </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="panel rule-top p-6">
+          <p className="field-label">Public health advisory</p>
+          <h2 className="text-base font-semibold mt-2" style={{ color: "var(--ink)" }}>
+            {advisory.action}
+          </h2>
+          <p className="text-sm mt-2 leading-relaxed max-w-2xl" style={{ color: "var(--ink-2)" }}>
+            {advisory.message}
+          </p>
+
+          {smogAdvisories.length > 0 && (
+            <dl className="mt-5 pt-4" style={{ borderTop: "1px solid var(--rule)" }}>
+              {smogAdvisories.slice(0, 4).map((adv, i) => (
+                <div
+                  key={i}
+                  className="grid grid-cols-[112px_minmax(0,1fr)] gap-4 py-2"
+                  style={i > 0 ? { borderTop: "1px solid var(--rule)" } : undefined}
+                >
+                  <dt
+                    className="text-[10px] font-bold uppercase tracking-wider pt-0.5"
+                    style={{ color: severityInk[adv.severity] }}
+                  >
+                    {adv.icon}
+                  </dt>
+                  <dd>
+                    <span className="text-xs font-semibold" style={{ color: "var(--ink)" }}>
+                      {adv.title}
+                    </span>
+                    <span className="text-xs ml-2 leading-relaxed" style={{ color: "var(--ink-2)" }}>
+                      {adv.detail}
+                    </span>
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          )}
+        </div>
+      </section>
+
+      {/* Key figures */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
         {data.worst_station && (
           <AQICard label="Worst Station" value={data.worst_station.aqi!} category={data.worst_station.category} subtitle={data.worst_station.name} />
         )}
@@ -370,18 +479,25 @@ function OverviewTab({ data, trend, advisory }: {
             label="PM2.5 Average"
             value={pm25Avg}
             category={getAQICategory(pm25Avg)}
-            subtitle="ug/m3 (WHO limit: 15)"
+            subtitle="µg/m³ · WHO guideline 15"
           />
         )}
       </div>
 
       {/* Map */}
-      <div className="glass rounded-2xl p-1.5">
-        <AQIMap stations={reporting} />
-      </div>
+      <section className="panel">
+        <div className="px-5 py-3.5" style={{ borderBottom: "1px solid var(--rule)" }}>
+          <h3 className="text-sm font-semibold" style={{ color: "var(--ink)" }}>
+            Station locations
+          </h3>
+        </div>
+        <div className="p-1.5">
+          <AQIMap stations={reporting} />
+        </div>
+      </section>
 
       {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <AQITrend data={trend.points} enabled={trend.enabled} />
         <PollutantBreakdown stations={reporting} measured={data.measured_pollutants} />
       </div>
@@ -405,7 +521,7 @@ function DepartmentTab({ type, data }: { type: string; data: DashboardData }) {
       metrics: [
         { label: "Health Risk Level", value: data.city_avg_aqi > 200 ? "SEVERE" : data.city_avg_aqi > 150 ? "HIGH" : data.city_avg_aqi > 100 ? "MODERATE" : "LOW", detail: "US EPA AQI health category for the network mean", severity: data.city_avg_aqi > 200 ? "critical" : data.city_avg_aqi > 150 ? "warning" : "info", derived: true },
         { label: "Public Advisory", value: data.city_avg_aqi > 200 ? "Stay Indoors" : data.city_avg_aqi > 150 ? "Limit Outdoors" : "Normal", detail: "US EPA AQI guidance for sensitive groups", derived: true },
-        { label: "PM2.5 Exposure", value: pm25Text, detail: pm25Avg !== null ? `ug/m3 — ${Math.round(pm25Avg / 15)}x WHO 24hr limit (15 ug/m3)` : "Not reported by the network", severity: "warning" },
+        { label: "PM2.5 Exposure", value: pm25Text, detail: pm25Avg !== null ? `µg/m³ — ${Math.round(pm25Avg / 15)}× the WHO 24-hour guideline of 15 µg/m³` : "Not reported by the network", severity: "warning" },
         { label: "Unhealthy Stations", value: `${reporting.filter(s => (s.aqi || 0) > 150).length} of ${reporting.length}`, detail: "Reporting stations above AQI 150" },
       ],
     },
@@ -415,8 +531,8 @@ function DepartmentTab({ type, data }: { type: string; data: DashboardData }) {
       description: "Particulate load across the network during the Rabi season. Crop-yield and burn-attribution conclusions require ground survey and satellite fire data, which this network does not provide.",
       metrics: [
         { label: "Particulate Load", value: data.city_avg_aqi > 200 ? "SEVERE" : data.city_avg_aqi > 150 ? "HIGH" : "MODERATE", detail: "Banded from network AQI. Yield impact requires ground survey to confirm.", severity: data.city_avg_aqi > 200 ? "critical" : "warning", derived: true },
-        { label: "PM10 Average", value: (() => { const v = reporting.map(s => s.pm10).filter((x): x is number => typeof x === "number"); return v.length ? `${Math.round(v.reduce((a, b) => a + b, 0) / v.length)}` : "—"; })(), detail: "ug/m3 — coarse particulates, the dust and crop-burn fraction" },
-        { label: "PM10 Spike Stations", value: `${reporting.filter(s => (s.pm10 || 0) > 200).length} of ${reporting.length}`, detail: "Stations above 200 ug/m3 PM10. Burn attribution needs satellite fire data.", severity: reporting.filter(s => (s.pm10 || 0) > 200).length > 1 ? "critical" : "info", derived: true },
+        { label: "PM10 Average", value: (() => { const v = reporting.map(s => s.pm10).filter((x): x is number => typeof x === "number"); return v.length ? `${Math.round(v.reduce((a, b) => a + b, 0) / v.length)}` : "—"; })(), detail: "µg/m³ — coarse particulates, the dust and crop-burn fraction" },
+        { label: "PM10 Spike Stations", value: `${reporting.filter(s => (s.pm10 || 0) > 200).length} of ${reporting.length}`, detail: "Stations above 200 µg/m³ PM10. Burn attribution needs satellite fire data.", severity: reporting.filter(s => (s.pm10 || 0) > 200).length > 1 ? "critical" : "info", derived: true },
         { label: "Wagha Border AQI", value: `${reporting.find(s => s.name.toLowerCase().includes("wagha") || s.name.toLowerCase().includes("border"))?.aqi ?? "—"}`, detail: "Easternmost station — proximity indicator only, not an attribution" },
       ],
     },
@@ -425,10 +541,10 @@ function DepartmentTab({ type, data }: { type: string; data: DashboardData }) {
       subtitle: "Punjab EPA / Environment Department",
       description: "National Environmental Quality Standards (NEQS) compliance tracking, emission source analysis, and regulatory enforcement data.",
       metrics: [
-        { label: "NEQS Status", value: pm25Avg !== null && pm25Avg > 35 ? "ABOVE LIMIT" : "WITHIN LIMIT", detail: "Indicative screening against NEQS PM2.5 24hr limit of 35 ug/m3", severity: pm25Avg !== null && pm25Avg > 35 ? "critical" : "info", derived: true },
+        { label: "NEQS Status", value: pm25Avg !== null && pm25Avg > 35 ? "ABOVE LIMIT" : "WITHIN LIMIT", detail: "Indicative screening against NEQS PM2.5 24-hour limit of 35 µg/m³", severity: pm25Avg !== null && pm25Avg > 35 ? "critical" : "info", derived: true },
         { label: "Dominant Pollutant", value: "PM2.5", detail: "Reported by WAQI as the dominant pollutant at these stations" },
-        { label: "Above NEQS PM2.5", value: `${reporting.filter(s => (s.pm25 || 0) > 35).length} of ${reporting.length}`, detail: "Reporting stations above 35 ug/m3", severity: "warning" },
-        { label: "Avg PM2.5", value: pm25Avg !== null ? `${pm25Avg} ug/m3` : "—", detail: "Network mean against the NEQS limit of 35 ug/m3" },
+        { label: "Above NEQS PM2.5", value: `${reporting.filter(s => (s.pm25 || 0) > 35).length} of ${reporting.length}`, detail: "Reporting stations above 35 µg/m³", severity: "warning" },
+        { label: "Avg PM2.5", value: pm25Avg !== null ? `${pm25Avg} µg/m³` : "—", detail: "Network mean against the NEQS limit of 35 µg/m³" },
       ],
     },
     safecity: {
@@ -447,51 +563,81 @@ function DepartmentTab({ type, data }: { type: string; data: DashboardData }) {
   const config = configs[type];
   if (!config) return null;
 
+  const severityInk: Record<string, string> = {
+    critical: "var(--aqi-unhealthy-ink)",
+    warning: "var(--aqi-unhealthy-sensitive-ink)",
+  };
+
   return (
-    <div className="space-y-5 animate-slide-in">
-      <div className="glass-bright rounded-2xl p-6">
-        <div className="flex items-start justify-between">
+    <div className="space-y-6 animate-fade-in">
+      <section className="panel rule-top p-6">
+        <div className="flex items-start justify-between gap-6 flex-wrap">
           <div>
-            <p className="text-[11px] text-zinc-500 uppercase tracking-widest mb-1">{config.subtitle}</p>
-            <h2 className="text-xl font-semibold text-zinc-100">{config.title}</h2>
-            <p className="text-sm text-zinc-500 mt-2 max-w-2xl leading-relaxed">{config.description}</p>
+            <p className="field-label">{config.subtitle}</p>
+            <h2
+              className="text-2xl font-bold mt-1.5 tracking-tight"
+              style={{ fontFamily: "var(--font-masthead), Georgia, serif", color: "var(--ink)" }}
+            >
+              {config.title}
+            </h2>
+            <p className="text-sm mt-2.5 max-w-2xl leading-relaxed" style={{ color: "var(--ink-2)" }}>
+              {config.description}
+            </p>
           </div>
-          <div className="text-right shrink-0 ml-4">
-            <div className="text-3xl font-bold tabular-nums" style={{ color: AQI_COLORS[getAQICategory(data.city_avg_aqi)] }}>{data.city_avg_aqi}</div>
-            <div className="text-[10px] text-zinc-500 uppercase">City AQI</div>
+          <div className="text-right shrink-0">
+            <p className="field-label">Network AQI</p>
+            <div
+              className="text-4xl font-bold tabular mt-1"
+              style={{ color: AQI_INK[getAQICategory(data.city_avg_aqi)] }}
+            >
+              {data.city_avg_aqi}
+            </div>
           </div>
         </div>
-      </div>
+      </section>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         {config.metrics.map((metric, i) => (
-          <div key={i} className="glass rounded-2xl p-5">
+          <div key={i} className="panel p-5">
             <div className="flex items-start justify-between gap-2">
-              <p className="text-[11px] text-zinc-500 uppercase tracking-wider">{metric.label}</p>
+              <p className="field-label">{metric.label}</p>
               {metric.derived && (
                 <span
-                  className="text-[8px] px-1.5 py-0.5 rounded bg-zinc-700/30 text-zinc-500 font-semibold uppercase tracking-wide shrink-0"
+                  className="text-[8px] px-1.5 py-0.5 font-bold uppercase tracking-wider shrink-0"
+                  style={{
+                    background: "var(--paper-sunk)",
+                    color: "var(--ink-3)",
+                    border: "1px solid var(--rule)",
+                  }}
                   title="Computed from AQI thresholds, not directly measured"
                 >
                   Derived
                 </span>
               )}
             </div>
-            <p className={`text-xl font-bold mt-1.5 tabular-nums ${
-              metric.severity === "critical" ? "text-red-400" :
-              metric.severity === "warning" ? "text-amber-400" :
-              "text-zinc-100"
-            }`}>
+            <p
+              className="text-xl font-bold mt-2 tabular"
+              style={{ color: severityInk[metric.severity ?? ""] ?? "var(--ink)" }}
+            >
               {metric.value}
             </p>
-            <p className="text-xs text-zinc-600 mt-2 leading-relaxed">{metric.detail}</p>
+            <p className="text-xs mt-2 leading-relaxed" style={{ color: "var(--ink-2)" }}>
+              {metric.detail}
+            </p>
           </div>
         ))}
       </div>
 
-      <div className="glass rounded-2xl p-1.5">
-        <AQIMap stations={reporting} />
-      </div>
+      <section className="panel">
+        <div className="px-5 py-3.5" style={{ borderBottom: "1px solid var(--rule)" }}>
+          <h3 className="text-sm font-semibold" style={{ color: "var(--ink)" }}>
+            Station locations
+          </h3>
+        </div>
+        <div className="p-1.5">
+          <AQIMap stations={reporting} />
+        </div>
+      </section>
 
       <StationTable stations={data.stations} />
     </div>
