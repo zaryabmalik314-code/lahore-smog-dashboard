@@ -114,7 +114,7 @@
   --on-aqi-hazardous: #ffffff;
   --on-aqi-unknown: #ffffff;
 
-  --map-filter: grayscale(1) invert(0.92) contrast(0.82) brightness(0.95);
+  --map-filter: grayscale(1) invert(1) brightness(0.88) contrast(1.25);
 }
 
 @theme inline {
@@ -167,8 +167,9 @@ body {
 }
 
 /* Hold the basemap back so the AQI markers are the only saturated thing on it.
-   The dark theme additionally inverts it, since an unmodified OSM raster is a
-   bright white slab on a dark page. */
+   The dark theme fully inverts the raster so roads read as light lines on dark.
+   The inversion must be invert(1): a partial invert blends each pixel toward
+   mid-grey, which flattened the whole map into near-black mush. */
 .leaflet-tile-pane {
   filter: var(--map-filter);
 }
