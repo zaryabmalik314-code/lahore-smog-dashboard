@@ -69,17 +69,28 @@ export default function AQIMap({ stations }: AQIMapProps) {
 
     mapInstanceRef.current = map;
 
-    // Leaflet caches the container size at init. If the panel is still settling
-    // (fonts, fade-in, responsive reflow) it tiles only the area it measured,
-    // so re-measure whenever the container's box actually changes — and refit,
-    // since the area that holds every station depends on the container width.
-    const observer = new ResizeObserver(() => {
-      map.invalidateSize();
-      fitToStations(map);
-    });
+    // Leaflet caches the container size at init, so a panel that is still
+    // settling (fonts, fade-in, responsive reflow) leaves it tiling only the
+    // area it first measured. Re-measure whenever the box changes, then refit.
+    //
+    // The two steps must land in separate frames. Changing the view in the same
+    // frame as invalidateSize cancels the tile fetch that invalidateSize just
+    // started, which left the grid covering the old, narrower box and the rest
+    // of the container blank.
+    let frame = 0;
+    const resync = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        map.invalidateSize({ animate: false });
+        frame = requestAnimationFrame(() => fitToStations(map));
+      });
+    };
+
+    const observer = new ResizeObserver(resync);
     observer.observe(mapRef.current);
 
     return () => {
+      cancelAnimationFrame(frame);
       observer.disconnect();
       map.remove();
       mapInstanceRef.current = null;
