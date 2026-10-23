@@ -54,39 +54,52 @@ export function distanceToNearest(px: number, py: number, samples: SamplePoint[]
   return best;
 }
 
-/** AQI category colour as rgb triplets, for painting into a canvas. */
-export const AQI_RGB: [number, number, number][] = [
-  [34, 197, 94], // good
-  [252, 211, 77], // moderate
-  [251, 146, 60], // unhealthy for sensitive
-  [225, 29, 72], // unhealthy
-  [167, 139, 250], // very unhealthy
-  [219, 39, 119], // hazardous
+/**
+ * Heat ramp keyed to the index breakpoints.
+ *
+ * Continuous rather than banded: a heat surface is read for where it is hot,
+ * and hard band edges across open ground imply a boundary the data cannot
+ * support. The band colours remain the anchors, so a point still lands on the
+ * colour its category would give it.
+ */
+const STOPS: { at: number; rgb: [number, number, number] }[] = [
+  { at: 0, rgb: [16, 150, 90] },
+  { at: 50, rgb: [34, 197, 94] },
+  { at: 100, rgb: [250, 204, 21] },
+  { at: 150, rgb: [249, 115, 22] },
+  { at: 200, rgb: [225, 29, 72] },
+  { at: 300, rgb: [190, 18, 60] },
+  { at: 500, rgb: [136, 19, 55] },
 ];
 
-const BREAKS = [50, 100, 150, 200, 300, 500];
-
-/** Colour for an AQI value, interpolated across the band boundary. */
 export function aqiRgb(aqi: number): [number, number, number] {
   const v = Math.max(0, Math.min(aqi, 500));
 
-  let band = BREAKS.findIndex((b) => v <= b);
-  if (band === -1) band = BREAKS.length - 1;
+  let i = STOPS.findIndex((s) => v <= s.at);
+  if (i <= 0) i = v <= 0 ? 1 : STOPS.length - 1;
 
-  const lower = band === 0 ? 0 : BREAKS[band - 1];
-  const upper = BREAKS[band];
-  const t = upper === lower ? 0 : (v - lower) / (upper - lower);
-
-  const from = AQI_RGB[band];
-  const to = AQI_RGB[Math.min(band + 1, AQI_RGB.length - 1)];
-
-  // Blend only in the top fifth of a band, so each band keeps its identity
-  // while the surface still reads as continuous.
-  const blend = t < 0.8 ? 0 : (t - 0.8) / 0.2;
+  const lo = STOPS[i - 1];
+  const hi = STOPS[i];
+  const t = hi.at === lo.at ? 0 : (v - lo.at) / (hi.at - lo.at);
 
   return [
-    Math.round(from[0] + (to[0] - from[0]) * blend),
-    Math.round(from[1] + (to[1] - from[1]) * blend),
-    Math.round(from[2] + (to[2] - from[2]) * blend),
+    Math.round(lo.rgb[0] + (hi.rgb[0] - lo.rgb[0]) * t),
+    Math.round(lo.rgb[1] + (hi.rgb[1] - lo.rgb[1]) * t),
+    Math.round(lo.rgb[2] + (hi.rgb[2] - lo.rgb[2]) * t),
   ];
+}
+
+/**
+ * How strongly to paint a value.
+ *
+ * Clean air is nearly transparent and bad air is close to opaque, so the
+ * surface reads as heat rather than as a flat choropleth — the eye goes to
+ * the worst areas without having to decode the colour.
+ */
+export function aqiIntensity(aqi: number): number {
+  const v = Math.max(0, Math.min(aqi, 400));
+  // Ramps from almost nothing at 40 to full weight by 250.
+  const t = Math.max(0, Math.min((v - 40) / 210, 1));
+  // Eased so the mid range still shows rather than climbing linearly.
+  return 0.14 + 0.72 * Math.pow(t, 0.75);
 }

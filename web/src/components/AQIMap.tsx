@@ -4,14 +4,20 @@ import { useEffect, useMemo, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { AQI_COLORS, AQI_INK, AQI_LABELS, SOURCE_TIER_LABELS, type Station } from "@/lib/types";
-import { idw, distanceToNearest, aqiRgb, type SamplePoint } from "@/lib/interpolate";
+import {
+  idw,
+  distanceToNearest,
+  aqiRgb,
+  aqiIntensity,
+  type SamplePoint,
+} from "@/lib/interpolate";
 
 interface AQIMapProps {
   stations: Station[];
 }
 
 /** Painted in blocks of this many pixels — fine enough to read as smooth. */
-const CELL = 6;
+const CELL = 4;
 /** Beyond this many pixels from any station the surface fades out entirely. */
 const FADE_START = 150;
 const FADE_END = 320;
@@ -64,6 +70,9 @@ function createSurfaceLayer(): L.Layer & { update: (s: Station[]) => void } {
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
       ctx.clearRect(0, 0, size.x, size.y);
+      // Blurs the sampling grid away so the result reads as a field rather
+      // than as cells, without having to sample every pixel.
+      ctx.filter = "blur(9px)";
 
       const usable = (this._stations || []).filter(
         (s) => !s.stale && typeof s.aqi === "number"
@@ -86,12 +95,15 @@ function createSurfaceLayer(): L.Layer & { update: (s: Station[]) => void } {
           const value = idw(cx, cy, samples);
           const [r, g, b] = aqiRgb(value);
 
-          // Opacity falls with distance from the nearest station, so the
-          // surface does not assert a reading where nothing supports one.
-          const fade =
+          // Two independent factors. Intensity tracks how bad the air is, so
+          // the worst areas burn and clean areas barely tint. Confidence falls
+          // with distance from the nearest station, so the surface does not
+          // assert a reading where nothing supports one.
+          const confidence =
             near <= FADE_START ? 1 : 1 - (near - FADE_START) / (FADE_END - FADE_START);
+          const alpha = aqiIntensity(value) * confidence;
 
-          ctx.fillStyle = `rgba(${r},${g},${b},${(0.42 * fade).toFixed(3)})`;
+          ctx.fillStyle = `rgba(${r},${g},${b},${alpha.toFixed(3)})`;
           ctx.fillRect(x, y, CELL, CELL);
         }
       }
@@ -193,6 +205,13 @@ export default function AQIMap({ stations }: AQIMapProps) {
     const b = boundsRef.current;
     if (!b || !b.isValid()) return;
     if (userMovedRef.current && !force) return;
+
+    // fitBounds solves for the zoom that makes the bounds fit the container.
+    // Run against a container Leaflet still measures as near-zero — which it
+    // is until layout settles — that solves to a zoom showing half a
+    // subcontinent. Wait for a real box instead of fitting to a wrong one.
+    const size = map.getSize();
+    if (size.x < 80 || size.y < 80) return;
 
     selfMovingRef.current = true;
     map.fitBounds(b, { padding: [36, 36], maxZoom: 13, animate: false });
