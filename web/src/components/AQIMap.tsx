@@ -41,16 +41,32 @@ export default function AQIMap({ stations }: AQIMapProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const boundsRef = useRef<L.LatLngBounds | null>(null);
+  /** Set once the viewer pans or zooms; the map stops reframing itself after. */
+  const userMovedRef = useRef(false);
+  /** True while we are moving the map ourselves, so our own moves aren't
+      mistaken for the viewer taking control. */
+  const selfMovingRef = useRef(false);
 
   /**
    * Frame every station rather than using a fixed zoom. At a narrow container
    * width a fixed zoom leaves the outlying stations — Wagha Border, Lathepur —
    * outside the viewport entirely.
+   *
+   * Never reframes after the viewer has moved the map: being yanked back to
+   * the default extent mid-inspection is worse than an imperfect framing.
    */
-  const fitToStations = (map: L.Map) => {
+  const fitToStations = (map: L.Map, force = false) => {
     const b = boundsRef.current;
     if (!b || !b.isValid()) return;
+    if (userMovedRef.current && !force) return;
+
+    selfMovingRef.current = true;
     map.fitBounds(b, { padding: [36, 36], maxZoom: 13, animate: false });
+    // fitBounds settles synchronously with animate:false, but release on the
+    // next tick so any trailing move event is still attributed to us.
+    setTimeout(() => {
+      selfMovingRef.current = false;
+    }, 0);
   };
 
   useEffect(() => {
@@ -91,13 +107,38 @@ export default function AQIMap({ stations }: AQIMapProps) {
     const observer = new ResizeObserver(resync);
     observer.observe(mapRef.current);
 
+    // Any pan or zoom the viewer performs hands them control of the extent.
+    const claim = () => {
+      if (!selfMovingRef.current) userMovedRef.current = true;
+    };
+    map.on("dragstart", claim);
+    map.on("zoomstart", claim);
+
     return () => {
       cancelAnimationFrame(frame);
       observer.disconnect();
+      map.off("dragstart", claim);
+      map.off("zoomstart", claim);
       map.remove();
       mapInstanceRef.current = null;
     };
   }, []);
+
+  // The dashboard re-renders every second for the clock, handing this component
+  // a new array each time. Keying the rebuild on what the markers actually show
+  // stops the layer being torn down and refitted once a second.
+  const signature = stations
+    .map((s) => `${s.id}:${s.latitude},${s.longitude}:${s.aqi}:${s.category}`)
+    .join("|");
+
+  // Only the positions decide whether a reframe is warranted; a changing
+  // reading should never move the map.
+  const positionSignature = stations
+    .map((s) => `${s.id}:${s.latitude},${s.longitude}`)
+    .join("|");
+
+  const latestStations = useRef(stations);
+  latestStations.current = stations;
 
   useEffect(() => {
     const map = mapInstanceRef.current;
@@ -107,7 +148,7 @@ export default function AQIMap({ stations }: AQIMapProps) {
       if (layer instanceof L.Marker) map.removeLayer(layer);
     });
 
-    stations.forEach((station) => {
+    latestStations.current.forEach((station) => {
       const marker = L.marker([station.latitude, station.longitude], {
         icon: createMarkerIcon(station.aqi, station.category),
       });
@@ -138,13 +179,21 @@ export default function AQIMap({ stations }: AQIMapProps) {
       marker.addTo(map);
     });
 
-    const coords = stations
+    const coords = latestStations.current
       .filter((s) => Number.isFinite(s.latitude) && Number.isFinite(s.longitude))
       .map((s) => [s.latitude, s.longitude] as [number, number]);
 
     boundsRef.current = coords.length ? L.latLngBounds(coords) : null;
-    fitToStations(map);
-  }, [stations]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signature]);
+
+  // Reframe only when which points are on the map changes, and only while the
+  // viewer has not taken control.
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (map) fitToStations(map);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [positionSignature]);
 
   return <div ref={mapRef} className="w-full h-[420px]" />;
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import dynamic from "next/dynamic";
 import AQICard from "./AQICard";
 import StationTable from "./StationTable";
@@ -407,7 +407,9 @@ function OverviewTab({ data, trend, advisory }: {
   trend: { points: TrendPoint[]; stations: StationSeries[]; enabled: boolean };
   advisory: ReturnType<typeof getHealthAdvisory>;
 }) {
-  const reporting = data.stations.filter((s) => !s.stale);
+  // Memoised: the clock re-renders this every second, and a fresh array
+  // each tick would tear down and refit the map layer continuously.
+  const reporting = useMemo(() => data.stations.filter((s) => !s.stale), [data.stations]);
   const smogAdvisories = getSmogAdvisories(data);
   const pm25Avg = meanOf(reporting);
   const whoMultiple = pm25Avg !== null ? Math.round(pm25Avg / 15) : null;
@@ -529,7 +531,9 @@ function OverviewTab({ data, trend, advisory }: {
 }
 
 function DepartmentTab({ type, data }: { type: string; data: DashboardData }) {
-  const reporting = data.stations.filter((s) => !s.stale);
+  // Memoised: the clock re-renders this every second, and a fresh array
+  // each tick would tear down and refit the map layer continuously.
+  const reporting = useMemo(() => data.stations.filter((s) => !s.stale), [data.stations]);
   const pm25Avg = meanOf(reporting);
   const pm25Text = pm25Avg !== null ? `${pm25Avg}` : "—";
 
