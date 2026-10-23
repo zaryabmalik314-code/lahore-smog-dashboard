@@ -160,6 +160,42 @@ export default function ReferenceSection() {
         </Panel>
       </div>
 
+      <Panel title="Open data">
+        <div className="px-5 py-4">
+          <p className="text-xs leading-relaxed max-w-2xl" style={{ color: "var(--ink-2)" }}>
+            Every department sharing this bulletin runs its own systems. These endpoints return the
+            same readings the page shows, so the data can be pulled into those systems rather than
+            read off a screen. No key is required and CORS is open.
+          </p>
+          <dl className="mt-4 space-y-3">
+            {[
+              ["/api/export", "Current readings for every station, JSON."],
+              ["/api/export?format=csv", "The same, as CSV for a spreadsheet."],
+              ["/api/export?series=1", "Hourly history per station over the trailing 24 hours."],
+              ["/api/export?series=1&format=csv", "The same history, as CSV."],
+            ].map(([path, desc]) => (
+              <div key={path} className="grid grid-cols-1 sm:grid-cols-[minmax(0,260px)_minmax(0,1fr)] gap-x-4 gap-y-1">
+                <dt>
+                  <a
+                    href={path}
+                    className="text-xs font-mono underline"
+                    style={{ color: "var(--accent)" }}
+                  >
+                    {path}
+                  </a>
+                </dt>
+                <dd className="text-xs" style={{ color: "var(--ink-2)" }}>{desc}</dd>
+              </div>
+            ))}
+          </dl>
+          <p className="text-[11px] mt-4 leading-relaxed" style={{ color: "var(--ink-3)" }}>
+            Readings belong to the operators named in each record. A station that has not reported
+            within six hours is returned with reporting=no rather than omitted, so a consumer can
+            tell a silent monitor from a missing one.
+          </p>
+        </div>
+      </Panel>
+
       <Panel title="How these figures are produced">
         <dl className="px-5 py-4 grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
           {[

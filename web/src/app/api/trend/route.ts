@@ -1,5 +1,6 @@
 import { NextResponse, connection } from "next/server";
 import { getTrend, getStationSeries, historyEnabled } from "@/lib/history";
+import { buildOutlook } from "@/lib/outlook";
 
 export async function GET() {
   // Trend reflects rows written since the last request, so it must never be
@@ -7,16 +8,16 @@ export async function GET() {
   await connection();
 
   if (!historyEnabled()) {
-    return NextResponse.json({ points: [], stations: [], enabled: false });
+    return NextResponse.json({ points: [], stations: [], outlook: null, enabled: false });
   }
 
   try {
     const [points, stations] = await Promise.all([getTrend(24), getStationSeries(24)]);
-    return NextResponse.json({ points, stations, enabled: true });
+    return NextResponse.json({ points, stations, outlook: buildOutlook(stations), enabled: true });
   } catch (e) {
     console.error("[trend] query failed:", e);
     return NextResponse.json(
-      { points: [], stations: [], enabled: true, error: true },
+      { points: [], stations: [], outlook: null, enabled: true, error: true },
       { status: 503 }
     );
   }

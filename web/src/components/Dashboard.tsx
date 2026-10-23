@@ -10,6 +10,10 @@ import StationDetail, { type StationSeries } from "./StationDetail";
 import ReferenceSection from "./ReferenceSection";
 import DepartmentAnalysis from "./DepartmentAnalysis";
 import ThemeToggle from "./ThemeToggle";
+import OutlookPanel from "./OutlookPanel";
+import AssessmentPanel from "./AssessmentPanel";
+import { buildOutlook, type Outlook } from "@/lib/outlook";
+import { assess, findingsFor, type Assessment } from "@/lib/assessment";
 import type { DashboardData, SourceTier, TrendPoint } from "@/lib/types";
 import { getAQICategory, AQI_COLORS, AQI_INK, AQI_LABELS, SOURCE_TIER_LABELS } from "@/lib/types";
 
@@ -63,11 +67,12 @@ export default function Dashboard() {
   const [activeTab, setActiveTab] = useState("overview");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [trend, setTrend] = useState<{ points: TrendPoint[]; stations: StationSeries[]; enabled: boolean }>({
-    points: [],
-    stations: [],
-    enabled: false,
-  });
+  const [trend, setTrend] = useState<{
+    points: TrendPoint[];
+    stations: StationSeries[];
+    outlook: Outlook | null;
+    enabled: boolean;
+  }>({ points: [], stations: [], outlook: null, enabled: false });
   const [time, setTime] = useState("");
 
   useEffect(() => {
@@ -96,10 +101,11 @@ export default function Dashboard() {
         setTrend({
           points: body.points || [],
           stations: body.stations || [],
+          outlook: body.outlook ?? null,
           enabled: Boolean(body.enabled),
         });
       } catch {
-        setTrend({ points: [], stations: [], enabled: false });
+        setTrend({ points: [], stations: [], outlook: null, enabled: false });
       }
     };
 
@@ -277,10 +283,10 @@ export default function Dashboard() {
         {activeTab === "overview" && (
           <OverviewTab data={data} trend={trend} advisory={advisory} />
         )}
-        {activeTab === "health" && <DepartmentTab type="health" data={data} />}
-        {activeTab === "agriculture" && <DepartmentTab type="agriculture" data={data} />}
-        {activeTab === "environment" && <DepartmentTab type="environment" data={data} />}
-        {activeTab === "safecity" && <DepartmentTab type="safecity" data={data} />}
+        {activeTab === "health" && <DepartmentTab type="health" data={data} trend={trend} />}
+        {activeTab === "agriculture" && <DepartmentTab type="agriculture" data={data} trend={trend} />}
+        {activeTab === "environment" && <DepartmentTab type="environment" data={data} trend={trend} />}
+        {activeTab === "safecity" && <DepartmentTab type="safecity" data={data} trend={trend} />}
         {activeTab === "reference" && <ReferenceSection />}
       </main>
 
@@ -404,7 +410,7 @@ function meanOf(stations: { pm25: number | null }[]): number | null {
 
 function OverviewTab({ data, trend, advisory }: {
   data: DashboardData;
-  trend: { points: TrendPoint[]; stations: StationSeries[]; enabled: boolean };
+  trend: { points: TrendPoint[]; stations: StationSeries[]; outlook: Outlook | null; enabled: boolean };
   advisory: ReturnType<typeof getHealthAdvisory>;
 }) {
   // Memoised: the clock re-renders this every second, and a fresh array
@@ -419,6 +425,9 @@ function OverviewTab({ data, trend, advisory }: {
     warning: "var(--aqi-unhealthy-sensitive-ink)",
     info: "var(--accent)",
   };
+
+  const outlook = trend.outlook ?? buildOutlook(trend.stations);
+  const assessment = assess(data, outlook);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -521,6 +530,12 @@ function OverviewTab({ data, trend, advisory }: {
         <PollutantBreakdown stations={reporting} measured={data.measured_pollutants} />
       </div>
 
+      {/* Where it is heading */}
+      <OutlookPanel outlook={outlook} />
+
+      {/* Assessment */}
+      <AssessmentPanel assessment={assessment} />
+
       {/* Per-station records */}
       <StationDetail stations={trend.stations} />
 
@@ -530,7 +545,13 @@ function OverviewTab({ data, trend, advisory }: {
   );
 }
 
-function DepartmentTab({ type, data }: { type: string; data: DashboardData }) {
+function DepartmentTab({ type, data, trend }: {
+  type: string;
+  data: DashboardData;
+  trend: { points: TrendPoint[]; stations: StationSeries[]; outlook: Outlook | null; enabled: boolean };
+}) {
+  const outlook = trend.outlook ?? buildOutlook(trend.stations);
+  const deptFindings = findingsFor(assess(data, outlook), type);
   // Memoised: the clock re-renders this every second, and a fresh array
   // each tick would tear down and refit the map layer continuously.
   const reporting = useMemo(() => data.stations.filter((s) => !s.stale), [data.stations]);
@@ -651,6 +672,50 @@ function DepartmentTab({ type, data }: { type: string; data: DashboardData }) {
           </div>
         ))}
       </div>
+
+      {deptFindings.length > 0 && (
+        <section className="panel">
+          <div className="px-5 py-3.5" style={{ borderBottom: "1px solid var(--rule)" }}>
+            <h3 className="text-sm font-semibold" style={{ color: "var(--ink)" }}>
+              What this means for {config.subtitle}
+            </h3>
+          </div>
+          <dl className="px-5 py-1">
+            {deptFindings.map((f, i) => (
+              <div
+                key={f.id}
+                className="grid grid-cols-[72px_minmax(0,1fr)] gap-4 py-3.5"
+                style={i === 0 ? undefined : { borderTop: "1px solid var(--rule)" }}
+              >
+                <dt
+                  className="text-[10px] font-bold uppercase tracking-wider pt-0.5"
+                  style={{
+                    color:
+                      f.severity === "critical"
+                        ? "var(--aqi-unhealthy-ink)"
+                        : f.severity === "warning"
+                          ? "var(--aqi-unhealthy-sensitive-ink)"
+                          : "var(--accent)",
+                  }}
+                >
+                  {f.severity === "critical" ? "Act now" : f.severity === "warning" ? "Watch" : "Note"}
+                </dt>
+                <dd>
+                  <p className="text-sm font-semibold" style={{ color: "var(--ink)" }}>{f.headline}</p>
+                  <p className="text-xs mt-1.5 leading-relaxed" style={{ color: "var(--ink-2)" }}>{f.detail}</p>
+                  {f.caveat && (
+                    <p className="text-xs mt-1.5 leading-relaxed" style={{ color: "var(--ink-3)" }}>
+                      Limit: {f.caveat}
+                    </p>
+                  )}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      )}
+
+      <OutlookPanel outlook={outlook} />
 
       <DepartmentAnalysis
         type={type as "health" | "agriculture" | "environment" | "safecity"}
