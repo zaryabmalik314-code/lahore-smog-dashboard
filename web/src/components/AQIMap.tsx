@@ -10,9 +10,11 @@ interface AQIMapProps {
 }
 
 function createMarkerIcon(aqi: number | null, category: string): L.DivIcon {
-  const color = AQI_COLORS[category as keyof typeof AQI_COLORS] || "#8b8b84";
-  // Moderate's fill is too light to carry white text; switch to dark ink there.
-  const textColor = category === "moderate" ? "#2a1f00" : "#ffffff";
+  const color = AQI_COLORS[category as keyof typeof AQI_COLORS] || "var(--aqi-unknown)";
+  // Which categories carry light or dark labels differs per theme — several
+  // console-theme marks are bright — so the pairing is a token, not a guess.
+  const key = (category in AQI_COLORS ? category : "unknown").replace(/_/g, "-");
+  const textColor = `var(--on-aqi-${key})`;
   return L.divIcon({
     className: "",
     html: `<div style="
@@ -25,7 +27,7 @@ function createMarkerIcon(aqi: number | null, category: string): L.DivIcon {
         display: flex;
         align-items: center;
         justify-content: center;
-        border: 2px solid #ffffff;
+        border: 2px solid var(--paper-raised);
         box-shadow: 0 1px 4px rgba(0,0,0,0.35);
         font-variant-numeric: tabular-nums;
         font-family: system-ui, sans-serif;
@@ -112,15 +114,15 @@ export default function AQIMap({ stations }: AQIMapProps) {
 
       const ink = AQI_INK[station.category];
       const cell = (label: string, value: string) => `
-        <div style="padding: 5px 7px; background: #f4f4f1; border: 1px solid #dcdcd6;">
-          <span style="color: #6b7280; display: block; font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase; font-weight: 600;">${label}</span>
-          <span style="color: #16181d; font-weight: 600; font-variant-numeric: tabular-nums;">${value}</span>
+        <div style="padding: 5px 7px; background: var(--paper-sunk); border: 1px solid var(--rule);">
+          <span style="color: var(--ink-3); display: block; font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase; font-weight: 600;">${label}</span>
+          <span style="color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums;">${value}</span>
         </div>`;
 
       marker.bindPopup(`
         <div style="font-family: system-ui, sans-serif; min-width: 210px;">
-          <div style="font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #6b7280; font-weight: 600;">${SOURCE_TIER_LABELS[station.tier]} station</div>
-          <div style="font-size: 14px; font-weight: 600; color: #16181d; margin-top: 2px; padding-bottom: 8px; border-bottom: 1px solid #dcdcd6;">${station.name.replace(/, Pakistan$/, "")}</div>
+          <div style="font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); font-weight: 600;">${SOURCE_TIER_LABELS[station.tier]} station</div>
+          <div style="font-size: 14px; font-weight: 600; color: var(--ink); margin-top: 2px; padding-bottom: 8px; border-bottom: 1px solid var(--rule);">${station.name.replace(/, Pakistan$/, "")}</div>
           <div style="display: flex; align-items: baseline; gap: 8px; margin: 10px 0;">
             <span style="font-size: 30px; font-weight: 700; color: ${ink}; line-height: 1; font-variant-numeric: tabular-nums;">${station.aqi ?? "—"}</span>
             <span style="font-size: 11px; color: ${ink}; font-weight: 600;">${AQI_LABELS[station.category]}</span>
@@ -129,7 +131,7 @@ export default function AQIMap({ stations }: AQIMapProps) {
             ${cell("PM2.5", station.pm25 != null ? `${station.pm25} µg/m³` : "no sensor")}
             ${cell("PM10", station.pm10 != null ? `${station.pm10} µg/m³` : "no sensor")}
           </div>
-          <div style="margin-top: 8px; font-size: 10px; color: #6b7280;">${station.attribution}</div>
+          <div style="margin-top: 8px; font-size: 10px; color: var(--ink-3);">${station.attribution}</div>
         </div>
       `);
 

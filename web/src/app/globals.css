@@ -1,12 +1,15 @@
 @import "tailwindcss";
 
-:root {
-  /* Document surfaces — warm paper white, not pure #fff, to cut glare on projectors */
+/* ─── Theme: civic (light) ─────────────────────────────────────────────
+   Printable paper base. AQI steps validated against #fcfcfb for lightness
+   band, chroma, CVD separation and normal-vision separation.             */
+:root,
+:root[data-theme="civic"] {
   --paper: #fcfcfb;
   --paper-sunk: #f4f4f1;
   --paper-raised: #ffffff;
 
-  /* Ink. --ink-3 is the lightest tone still passing 4.5:1 on --paper. */
+  /* --ink-3 is the lightest tone still passing 4.5:1 on --paper. */
   --ink: #16181d;
   --ink-2: #474c55;
   --ink-3: #6b7280;
@@ -14,26 +17,101 @@
   --rule: #dcdcd6;
   --rule-strong: #b8b8b1;
   --masthead: #182030;
-  --masthead-2: #2a3446;
+  --masthead-ink: #e4e8ee;
+  --masthead-ink-2: #c3cad6;
+  --masthead-ink-3: #8d98a8;
+  --accent: #1d4ed8;
 
-  /* AQI marks — EPA category hues re-stepped for a light surface.
-     Validated: lightness band, chroma, CVD separation, normal-vision floor.
-     Use for fills, bars and dots only. */
+  --radius: 2px;
+  --panel-shadow: none;
+
+  --tier-official: #1d4ed8;
+  --tier-citizen: #0f766e;
+  --tier-reference: #5c5c56;
+
+  /* Marks — fills, bars and dots only. */
   --aqi-good: #1a7f37;
   --aqi-moderate: #e0a800;
   --aqi-unhealthy-sensitive: #d1500a;
   --aqi-unhealthy: #9e1414;
   --aqi-very-unhealthy: #6b21a8;
   --aqi-hazardous: #8c2240;
+  --aqi-unknown: #8b8b84;
 
-  /* AQI ink — the same categories at >=4.5:1 on paper, for numerals and labels.
-     --aqi-moderate sits at 2.09:1 and must never carry text. */
+  /* Ink — >=4.5:1 on paper. --aqi-moderate is 2.09:1 and never carries text. */
   --aqi-good-ink: #166534;
   --aqi-moderate-ink: #8a6500;
   --aqi-unhealthy-sensitive-ink: #b8470b;
   --aqi-unhealthy-ink: #9e1414;
   --aqi-very-unhealthy-ink: #6b21a8;
   --aqi-hazardous-ink: #8c2240;
+  --aqi-unknown-ink: #5c5c56;
+
+  /* Label colour that sits on each mark, so a marker pill stays legible. */
+  --on-aqi-good: #ffffff;
+  --on-aqi-moderate: #2a1f00;
+  --on-aqi-unhealthy-sensitive: #ffffff;
+  --on-aqi-unhealthy: #ffffff;
+  --on-aqi-very-unhealthy: #ffffff;
+  --on-aqi-hazardous: #ffffff;
+  --on-aqi-unknown: #ffffff;
+
+  --map-filter: grayscale(1) contrast(0.86) brightness(1.08);
+}
+
+/* ─── Theme: console (dark) ────────────────────────────────────────────
+   Operations surface. Its own validated AQI steps — the civic steps are
+   unreadable here, so they are re-stepped against the dark surface rather
+   than reused.                                                           */
+:root[data-theme="console"] {
+  --paper: #0d1117;
+  --paper-sunk: #161b22;
+  --paper-raised: #11161d;
+
+  --ink: #e8edf4;
+  --ink-2: #a6b2c2;
+  --ink-3: #7a8798;
+
+  --rule: #262d38;
+  --rule-strong: #3a4452;
+  --masthead: #070a0e;
+  --masthead-ink: #e8edf4;
+  --masthead-ink-2: #a6b2c2;
+  --masthead-ink-3: #6f7d8e;
+  --accent: #58a6ff;
+
+  --radius: 2px;
+  --panel-shadow: none;
+
+  --tier-official: #58a6ff;
+  --tier-citizen: #2dd4bf;
+  --tier-reference: #8b98a9;
+
+  --aqi-good: #22c55e;
+  --aqi-moderate: #fcd34d;
+  --aqi-unhealthy-sensitive: #fb923c;
+  --aqi-unhealthy: #e11d48;
+  --aqi-very-unhealthy: #a78bfa;
+  --aqi-hazardous: #db2777;
+  --aqi-unknown: #6b7684;
+
+  --aqi-good-ink: #22c55e;
+  --aqi-moderate-ink: #fcd34d;
+  --aqi-unhealthy-sensitive-ink: #fb923c;
+  --aqi-unhealthy-ink: #fb7185;
+  --aqi-very-unhealthy-ink: #a78bfa;
+  --aqi-hazardous-ink: #f472b6;
+  --aqi-unknown-ink: #8b98a9;
+
+  --on-aqi-good: #06240f;
+  --on-aqi-moderate: #2a1f00;
+  --on-aqi-unhealthy-sensitive: #2b1403;
+  --on-aqi-unhealthy: #ffffff;
+  --on-aqi-very-unhealthy: #1a0f33;
+  --on-aqi-hazardous: #ffffff;
+  --on-aqi-unknown: #ffffff;
+
+  --map-filter: grayscale(1) invert(0.92) contrast(0.82) brightness(0.95);
 }
 
 @theme inline {
@@ -85,9 +163,11 @@ body {
   background: var(--paper-sunk);
 }
 
-/* Hold the basemap back so the AQI markers are the only saturated thing on it. */
+/* Hold the basemap back so the AQI markers are the only saturated thing on it.
+   The dark theme additionally inverts it, since an unmodified OSM raster is a
+   bright white slab on a dark page. */
 .leaflet-tile-pane {
-  filter: grayscale(1) contrast(0.86) brightness(1.08);
+  filter: var(--map-filter);
 }
 
 .aqi-ring {

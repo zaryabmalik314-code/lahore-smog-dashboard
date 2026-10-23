@@ -14,9 +14,9 @@ interface StationTableProps {
 }
 
 const TIER_INK: Record<SourceTier, string> = {
-  official: "#1d4ed8",
-  citizen: "#0f766e",
-  reference: "#5c5c56",
+  official: "var(--tier-official)",
+  citizen: "var(--tier-citizen)",
+  reference: "var(--tier-reference)",
 };
 
 function formatAge(minutes: number): string {

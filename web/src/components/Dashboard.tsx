@@ -9,18 +9,19 @@ import PollutantBreakdown from "./PollutantBreakdown";
 import StationDetail, { type StationSeries } from "./StationDetail";
 import ReferenceSection from "./ReferenceSection";
 import DepartmentAnalysis from "./DepartmentAnalysis";
+import ThemeToggle from "./ThemeToggle";
 import type { DashboardData, SourceTier, TrendPoint } from "@/lib/types";
 import { getAQICategory, AQI_COLORS, AQI_INK, AQI_LABELS, SOURCE_TIER_LABELS } from "@/lib/types";
 
 const AQIMap = dynamic(() => import("./AQIMap"), { ssr: false });
 
 function getHealthAdvisory(aqi: number) {
-  if (aqi > 300) return { level: "EMERGENCY", message: "Hazardous air quality. All outdoor activities must be suspended. Schools and offices should close. N95 masks mandatory outdoors.", action: "STAY INDOORS", color: "#dc2626" };
-  if (aqi > 200) return { level: "SEVERE", message: "Very unhealthy air. Sensitive groups must stay indoors. Outdoor exercise prohibited. Consider N95 masks for essential outdoor trips.", action: "LIMIT EXPOSURE", color: "#a855f7" };
-  if (aqi > 150) return { level: "WARNING", message: "Unhealthy air quality for all groups. Reduce prolonged outdoor exertion. Children, elderly, and respiratory patients should stay indoors.", action: "REDUCE OUTDOOR ACTIVITY", color: "#ef4444" };
-  if (aqi > 100) return { level: "CAUTION", message: "Air quality is unhealthy for sensitive groups. People with asthma, heart or lung disease should reduce prolonged outdoor exertion.", action: "SENSITIVE GROUPS CAUTION", color: "#f97316" };
-  if (aqi > 50) return { level: "MODERATE", message: "Air quality is acceptable. Some pollutants may be a concern for a small number of sensitive individuals.", action: "GENERALLY SAFE", color: "#eab308" };
-  return { level: "GOOD", message: "Air quality is satisfactory. No health risk from air pollution.", action: "ALL CLEAR", color: "#22c55e" };
+  if (aqi > 300) return { level: "EMERGENCY", message: "Hazardous air quality. All outdoor activities must be suspended. Schools and offices should close. N95 masks mandatory outdoors.", action: "STAY INDOORS", color: "var(--aqi-hazardous)" };
+  if (aqi > 200) return { level: "SEVERE", message: "Very unhealthy air. Sensitive groups must stay indoors. Outdoor exercise prohibited. Consider N95 masks for essential outdoor trips.", action: "LIMIT EXPOSURE", color: "var(--aqi-very-unhealthy)" };
+  if (aqi > 150) return { level: "WARNING", message: "Unhealthy air quality for all groups. Reduce prolonged outdoor exertion. Children, elderly, and respiratory patients should stay indoors.", action: "REDUCE OUTDOOR ACTIVITY", color: "var(--aqi-unhealthy)" };
+  if (aqi > 100) return { level: "CAUTION", message: "Air quality is unhealthy for sensitive groups. People with asthma, heart or lung disease should reduce prolonged outdoor exertion.", action: "SENSITIVE GROUPS CAUTION", color: "var(--aqi-unhealthy-sensitive)" };
+  if (aqi > 50) return { level: "MODERATE", message: "Air quality is acceptable. Some pollutants may be a concern for a small number of sensitive individuals.", action: "GENERALLY SAFE", color: "var(--aqi-moderate)" };
+  return { level: "GOOD", message: "Air quality is satisfactory. No health risk from air pollution.", action: "ALL CLEAR", color: "var(--aqi-good)" };
 }
 
 function getSmogAdvisories(data: DashboardData) {
@@ -170,16 +171,17 @@ export default function Dashboard() {
         <div className="max-w-[1180px] mx-auto px-5 sm:px-8 py-3 flex items-center justify-between gap-4">
           <p
             className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-[0.14em]"
-            style={{ color: "#c3cad6" }}
+            style={{ color: "var(--masthead-ink-2)" }}
           >
             Lahore Air Quality Monitoring
           </p>
           <div className="flex items-center gap-4 shrink-0">
-            <span className="hidden sm:inline text-[10px] uppercase tracking-[0.1em]" style={{ color: "#8d98a8" }}>
+            <ThemeToggle />
+            <span className="hidden sm:inline text-[10px] uppercase tracking-[0.1em]" style={{ color: "var(--masthead-ink-3)" }}>
               Ref {reference}
             </span>
-            <span className="font-mono text-xs tabular" style={{ color: "#e4e8ee" }}>
-              {time} <span style={{ color: "#8d98a8" }}>PKT</span>
+            <span className="font-mono text-xs tabular" style={{ color: "var(--masthead-ink)" }}>
+              {time} <span style={{ color: "var(--masthead-ink-3)" }}>PKT</span>
             </span>
           </div>
         </div>
@@ -378,9 +380,9 @@ function AQIGauge({ value, size = 190 }: { value: number; size?: number }) {
 }
 
 export const TIER_COLORS: Record<SourceTier, string> = {
-  official: "#1d4ed8",
-  citizen: "#0f766e",
-  reference: "#6b7280",
+  official: "var(--tier-official)",
+  citizen: "var(--tier-citizen)",
+  reference: "var(--tier-reference)",
 };
 
 function TierDot({ tier }: { tier: SourceTier }) {
@@ -413,7 +415,7 @@ function OverviewTab({ data, trend, advisory }: {
   const severityInk: Record<string, string> = {
     critical: "var(--aqi-unhealthy-ink)",
     warning: "var(--aqi-unhealthy-sensitive-ink)",
-    info: "#1d4ed8",
+    info: "var(--accent)",
   };
 
   return (

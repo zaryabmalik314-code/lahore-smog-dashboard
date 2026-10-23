@@ -51,8 +51,8 @@ export default function AQITrend({ data, enabled }: AQITrendProps) {
           <AreaChart data={data}>
             <defs>
               <linearGradient id="aqiGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#9e1414" stopOpacity={0.16} />
-                <stop offset="100%" stopColor="#9e1414" stopOpacity={0.01} />
+                <stop offset="0%" stopColor="var(--aqi-unhealthy)" stopOpacity={0.16} />
+                <stop offset="100%" stopColor="var(--aqi-unhealthy)" stopOpacity={0.01} />
               </linearGradient>
             </defs>
             <CartesianGrid stroke="var(--rule)" vertical={false} />
@@ -104,11 +104,11 @@ export default function AQITrend({ data, enabled }: AQITrendProps) {
             <Area
               type="monotone"
               dataKey="aqi"
-              stroke="#9e1414"
+              stroke="var(--aqi-unhealthy)"
               fill="url(#aqiGradient)"
               strokeWidth={2}
               dot={false}
-              activeDot={{ r: 4, fill: "#9e1414", stroke: "var(--paper-raised)", strokeWidth: 2 }}
+              activeDot={{ r: 4, fill: "var(--aqi-unhealthy)", stroke: "var(--paper-raised)", strokeWidth: 2 }}
             />
           </AreaChart>
         </ResponsiveContainer>

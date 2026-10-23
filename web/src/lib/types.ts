@@ -66,32 +66,31 @@ export interface TrendPoint {
 }
 
 /**
- * EPA AQI category hues re-stepped for a light surface. Validated for CVD
- * separation and normal-vision separation of adjacent categories.
- * Fills, bars and dots only — several of these cannot carry text.
+ * EPA AQI category hues, resolved from CSS custom properties so the active
+ * theme decides the actual steps. Each theme's palette is validated separately
+ * against its own surface — a light-surface step is unreadable on a dark one.
+ *
+ * Marks are for fills, bars and dots; several of them cannot carry text.
  */
 export const AQI_COLORS: Record<AQICategory, string> = {
-  good: "#1a7f37",
-  moderate: "#e0a800",
-  unhealthy_sensitive: "#d1500a",
-  unhealthy: "#9e1414",
-  very_unhealthy: "#6b21a8",
-  hazardous: "#8c2240",
-  unknown: "#8b8b84",
+  good: "var(--aqi-good)",
+  moderate: "var(--aqi-moderate)",
+  unhealthy_sensitive: "var(--aqi-unhealthy-sensitive)",
+  unhealthy: "var(--aqi-unhealthy)",
+  very_unhealthy: "var(--aqi-very-unhealthy)",
+  hazardous: "var(--aqi-hazardous)",
+  unknown: "var(--aqi-unknown)",
 };
 
-/**
- * The same categories at >=4.5:1 against paper, for numerals and labels.
- * Moderate differs most: its mark colour sits at 2.09:1 and fails as text.
- */
+/** The same categories stepped to carry text against the active surface. */
 export const AQI_INK: Record<AQICategory, string> = {
-  good: "#166534",
-  moderate: "#8a6500",
-  unhealthy_sensitive: "#b8470b",
-  unhealthy: "#9e1414",
-  very_unhealthy: "#6b21a8",
-  hazardous: "#8c2240",
-  unknown: "#5c5c56",
+  good: "var(--aqi-good-ink)",
+  moderate: "var(--aqi-moderate-ink)",
+  unhealthy_sensitive: "var(--aqi-unhealthy-sensitive-ink)",
+  unhealthy: "var(--aqi-unhealthy-ink)",
+  very_unhealthy: "var(--aqi-very-unhealthy-ink)",
+  hazardous: "var(--aqi-hazardous-ink)",
+  unknown: "var(--aqi-unknown-ink)",
 };
 
 export const AQI_LABELS: Record<AQICategory, string> = {

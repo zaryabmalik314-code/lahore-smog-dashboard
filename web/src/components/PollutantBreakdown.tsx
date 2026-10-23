@@ -8,12 +8,12 @@ interface PollutantBreakdownProps {
 }
 
 const POLLUTANTS = [
-  { key: "pm25" as const, name: "PM2.5", limit: 15, unit: "µg/m³", who: "24-hour", color: "#9e1414" },
-  { key: "pm10" as const, name: "PM10", limit: 45, unit: "µg/m³", who: "24-hour", color: "#d1500a" },
-  { key: "no2" as const, name: "NO₂", limit: 25, unit: "µg/m³", who: "annual", color: "#8a6500" },
-  { key: "so2" as const, name: "SO₂", limit: 40, unit: "µg/m³", who: "24-hour", color: "#6b21a8" },
-  { key: "co" as const, name: "CO", limit: 4, unit: "mg/m³", who: "24-hour", color: "#0f766e" },
-  { key: "o3" as const, name: "O₃", limit: 100, unit: "µg/m³", who: "8-hour", color: "#1a7f37" },
+  { key: "pm25" as const, name: "PM2.5", limit: 15, unit: "µg/m³", who: "24-hour", color: "var(--aqi-unhealthy)" },
+  { key: "pm10" as const, name: "PM10", limit: 45, unit: "µg/m³", who: "24-hour", color: "var(--aqi-unhealthy-sensitive)" },
+  { key: "no2" as const, name: "NO₂", limit: 25, unit: "µg/m³", who: "annual", color: "var(--aqi-moderate-ink)" },
+  { key: "so2" as const, name: "SO₂", limit: 40, unit: "µg/m³", who: "24-hour", color: "var(--aqi-very-unhealthy)" },
+  { key: "co" as const, name: "CO", limit: 4, unit: "mg/m³", who: "24-hour", color: "var(--tier-citizen)" },
+  { key: "o3" as const, name: "O₃", limit: 100, unit: "µg/m³", who: "8-hour", color: "var(--aqi-good)" },
 ];
 
 /** Average across only the stations that actually report this pollutant. */
