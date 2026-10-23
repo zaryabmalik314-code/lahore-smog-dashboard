@@ -70,9 +70,6 @@ function createSurfaceLayer(): L.Layer & { update: (s: Station[]) => void } {
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
       ctx.clearRect(0, 0, size.x, size.y);
-      // Blurs the sampling grid away so the result reads as a field rather
-      // than as cells, without having to sample every pixel.
-      ctx.filter = "blur(9px)";
 
       const usable = (this._stations || []).filter(
         (s) => !s.stale && typeof s.aqi === "number"
@@ -83,6 +80,16 @@ function createSurfaceLayer(): L.Layer & { update: (s: Station[]) => void } {
         const p = map.latLngToContainerPoint([s.latitude, s.longitude]);
         return { x: p.x, y: p.y, value: s.aqi as number };
       });
+
+      // Paint the grid flat on an offscreen canvas, then composite it once
+      // through the blur. Setting ctx.filter on the target applies the blur to
+      // every fillRect — nearly 29,000 of them here, which measured 65ms
+      // against 9ms unfiltered and made panning stutter.
+      const off = document.createElement("canvas");
+      off.width = size.x;
+      off.height = size.y;
+      const octx = off.getContext("2d");
+      if (!octx) return;
 
       for (let y = 0; y < size.y; y += CELL) {
         for (let x = 0; x < size.x; x += CELL) {
@@ -103,10 +110,14 @@ function createSurfaceLayer(): L.Layer & { update: (s: Station[]) => void } {
             near <= FADE_START ? 1 : 1 - (near - FADE_START) / (FADE_END - FADE_START);
           const alpha = aqiIntensity(value) * confidence;
 
-          ctx.fillStyle = `rgba(${r},${g},${b},${alpha.toFixed(3)})`;
-          ctx.fillRect(x, y, CELL, CELL);
+          octx.fillStyle = `rgba(${r},${g},${b},${alpha.toFixed(3)})`;
+          octx.fillRect(x, y, CELL, CELL);
         }
       }
+
+      ctx.filter = "blur(9px)";
+      ctx.drawImage(off, 0, 0);
+      ctx.filter = "none";
     },
   });
 

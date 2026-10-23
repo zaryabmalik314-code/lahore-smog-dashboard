@@ -10,6 +10,7 @@ import StationDetail, { type StationSeries } from "./StationDetail";
 import ReferenceSection from "./ReferenceSection";
 import DepartmentAnalysis from "./DepartmentAnalysis";
 import ThemeToggle from "./ThemeToggle";
+import Clock from "./Clock";
 import OutlookPanel from "./OutlookPanel";
 import AssessmentPanel from "./AssessmentPanel";
 import AQIHero from "./AQIHero";
@@ -75,7 +76,6 @@ export default function Dashboard() {
     outlook: Outlook | null;
     enabled: boolean;
   }>({ points: [], stations: [], outlook: null, enabled: false });
-  const [time, setTime] = useState("");
 
   useEffect(() => {
     const loadAqi = async () => {
@@ -114,22 +114,8 @@ export default function Dashboard() {
     loadAqi();
     loadTrend();
 
-    const tick = () =>
-      setTime(
-        new Date().toLocaleTimeString("en-GB", {
-          timeZone: "Asia/Karachi",
-          hour: "2-digit",
-          minute: "2-digit",
-          second: "2-digit",
-          hour12: false,
-        })
-      );
-    tick();
-
     const interval = setInterval(() => { loadAqi(); loadTrend(); }, 5 * 60 * 1000);
-    const clock = setInterval(tick, 1000);
-
-    return () => { clearInterval(interval); clearInterval(clock); };
+    return () => clearInterval(interval);
   }, []);
 
   if (loading) {
@@ -187,9 +173,7 @@ export default function Dashboard() {
             <span className="hidden sm:inline text-[10px] uppercase tracking-[0.1em]" style={{ color: "var(--masthead-ink-3)" }}>
               Ref {reference}
             </span>
-            <span className="font-mono text-xs tabular" style={{ color: "var(--masthead-ink)" }}>
-              {time} <span style={{ color: "var(--masthead-ink-3)" }}>PKT</span>
-            </span>
+            <Clock />
           </div>
         </div>
       </div>
