@@ -476,6 +476,14 @@ function OverviewTab({ data, trend, advisory }: {
         <div className="p-1.5">
           <AQIMap stations={reporting} />
         </div>
+        <div className="px-5 py-3" style={{ borderTop: "1px solid var(--panel-border)", background: "var(--paper-sunk)" }}>
+          <p className="text-[11px] leading-relaxed" style={{ color: "var(--ink-3)" }}>
+            The shaded surface is interpolated between the reporting stations by inverse-distance
+            weighting. It shows what the readings imply about the air between the monitors, not a
+            measurement — it fades out where no station is near enough to support it, and with
+            this few stations the gradient is indicative only.
+          </p>
+        </div>
       </section>
 
       {/* Charts */}
@@ -697,6 +705,14 @@ function DepartmentTab({ type, data, trend }: {
         </div>
         <div className="p-1.5">
           <AQIMap stations={reporting} />
+        </div>
+        <div className="px-5 py-3" style={{ borderTop: "1px solid var(--panel-border)", background: "var(--paper-sunk)" }}>
+          <p className="text-[11px] leading-relaxed" style={{ color: "var(--ink-3)" }}>
+            The shaded surface is interpolated between the reporting stations by inverse-distance
+            weighting. It shows what the readings imply about the air between the monitors, not a
+            measurement — it fades out where no station is near enough to support it, and with
+            this few stations the gradient is indicative only.
+          </p>
         </div>
       </section>
 
