@@ -166,7 +166,7 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen">
       {/* Masthead */}
-      <div style={{ background: "var(--masthead)" }}>
+      <div className="masthead-bar" style={{ background: "var(--masthead)" }}>
         <div className="max-w-[1180px] mx-auto px-5 sm:px-8 py-3 flex items-center justify-between gap-4">
           <p
             className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-[0.14em]"

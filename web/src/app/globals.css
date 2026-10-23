@@ -139,12 +139,64 @@ body {
   margin: 12px 14px !important;
 }
 
-/* Print: the bulletin should survive being sent to a printer as-is. */
+/* Print: the bulletin is meant to be forwarded on paper, so it has to survive
+   being sent to a printer as-is. */
+@page {
+  margin: 14mm 12mm;
+}
+
 @media print {
-  .no-print { display: none !important; }
-  body { background: #fff; }
-  .panel, .panel-sunk {
+  .no-print,
+  .leaflet-control-zoom,
+  .leaflet-control-attribution {
+    display: none !important;
+  }
+
+  /* The AQI category colour IS the encoding. Browsers drop backgrounds when
+     printing by default, which would erase every swatch, bar and map pin. */
+  html,
+  body {
+    background: #fff;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  body * {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  .panel,
+  .panel-sunk {
     border: 1px solid #999;
     break-inside: avoid;
+  }
+
+  /* Keep a reading on the same page as the station it belongs to. */
+  tr,
+  dl > div {
+    break-inside: avoid;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  section {
+    break-inside: avoid-page;
+  }
+
+  /* A full-bleed dark masthead costs a cartridge and reads worse on paper. */
+  .masthead-bar {
+    background: #fff !important;
+    color: #16181d !important;
+    border-bottom: 2px solid #16181d;
+  }
+  .masthead-bar * {
+    color: #16181d !important;
+  }
+
+  a[href]::after {
+    content: "";
   }
 }
