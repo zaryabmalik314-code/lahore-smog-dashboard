@@ -9,7 +9,14 @@
  * live page traffic re-writes the same rows rather than duplicating them.
  */
 import { fetchAllStations } from "../src/lib/waqi";
-import { recordReadings, historyEnabled } from "../src/lib/history";
+import { recordReadings, historyEnabled, db } from "../src/lib/history";
+import {
+  evaluate,
+  record as recordAlerts,
+  deliver,
+  markDelivered,
+  previousHourMean,
+} from "../src/lib/alerts";
 
 async function main() {
   const startedAt = Date.now();
@@ -37,6 +44,26 @@ async function main() {
     `[record] ${fresh.length} of ${stations.length} stations written in ${elapsed}ms: ` +
       fresh.map((s) => `${s.name.replace(/, Pakistan$/, "")}=${s.aqi}`).join(", ")
   );
+
+  // Alerts are evaluated here rather than on page load so they fire whether or
+  // not anyone is looking, which is the entire point of an alert.
+  const conn = await db();
+  if (conn) {
+    const previous = await previousHourMean(conn);
+    const candidates = evaluate(stations, previous);
+    const stored = await recordAlerts(conn, candidates);
+
+    if (stored.length > 0) {
+      const sent = await deliver(stored);
+      if (sent > 0) await markDelivered(conn, stored.map((a) => a.id));
+      console.log(
+        `[alerts] raised ${stored.length}, delivered ${sent}: ` +
+          stored.map((a) => `${a.severity}/${a.kind}`).join(", ")
+      );
+    } else if (candidates.length > 0) {
+      console.log(`[alerts] ${candidates.length} condition(s) still within cooldown`);
+    }
+  }
 
   // postgres.js keeps the pool open; nothing else should hold the process here.
   process.exit(0);

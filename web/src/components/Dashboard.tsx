@@ -11,6 +11,7 @@ import ReferenceSection from "./ReferenceSection";
 import DepartmentAnalysis from "./DepartmentAnalysis";
 import ThemeToggle from "./ThemeToggle";
 import Clock from "./Clock";
+import AlertFeed, { type FeedAlert } from "./AlertFeed";
 import OutlookPanel from "./OutlookPanel";
 import AssessmentPanel from "./AssessmentPanel";
 import AQIHero from "./AQIHero";
@@ -70,6 +71,7 @@ export default function Dashboard() {
   const [activeTab, setActiveTab] = useState("overview");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [alerts, setAlerts] = useState<FeedAlert[]>([]);
   const [trend, setTrend] = useState<{
     points: TrendPoint[];
     stations: StationSeries[];
@@ -111,10 +113,21 @@ export default function Dashboard() {
       }
     };
 
+    const loadAlerts = async () => {
+      try {
+        const res = await fetch("/api/alerts?hours=48");
+        const body = await res.json();
+        setAlerts(body.alerts || []);
+      } catch {
+        setAlerts([]);
+      }
+    };
+
     loadAqi();
     loadTrend();
+    loadAlerts();
 
-    const interval = setInterval(() => { loadAqi(); loadTrend(); }, 5 * 60 * 1000);
+    const interval = setInterval(() => { loadAqi(); loadTrend(); loadAlerts(); }, 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, []);
 
@@ -272,7 +285,7 @@ export default function Dashboard() {
       {/* Main Content */}
       <main className="max-w-[1180px] mx-auto px-5 sm:px-8 py-7">
         {activeTab === "overview" && (
-          <OverviewTab data={data} trend={trend} advisory={advisory} />
+          <OverviewTab data={data} trend={trend} advisory={advisory} alerts={alerts} />
         )}
         {activeTab === "health" && <DepartmentTab type="health" data={data} trend={trend} />}
         {activeTab === "agriculture" && <DepartmentTab type="agriculture" data={data} trend={trend} />}
@@ -353,8 +366,9 @@ function meanOf(stations: { pm25: number | null }[]): number | null {
   return Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
 }
 
-function OverviewTab({ data, trend, advisory }: {
+function OverviewTab({ data, trend, advisory, alerts }: {
   data: DashboardData;
+  alerts: FeedAlert[];
   trend: { points: TrendPoint[]; stations: StationSeries[]; outlook: Outlook | null; enabled: boolean };
   advisory: ReturnType<typeof getHealthAdvisory>;
 }) {
@@ -481,6 +495,9 @@ function OverviewTab({ data, trend, advisory }: {
 
       {/* Assessment */}
       <AssessmentPanel assessment={assessment} />
+
+      {/* Alerts raised by the scheduled evaluation */}
+      <AlertFeed alerts={alerts} />
 
       {/* Per-station records */}
       <StationDetail stations={trend.stations} />

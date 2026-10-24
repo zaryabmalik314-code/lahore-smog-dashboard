@@ -41,6 +41,23 @@ async function ensureSchema(db: postgres.Sql): Promise<void> {
         CREATE INDEX IF NOT EXISTS readings_recorded_at_idx
         ON readings (recorded_at DESC)
       `;
+      await db`
+        CREATE TABLE IF NOT EXISTS alerts (
+          id          BIGSERIAL   PRIMARY KEY,
+          raised_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          kind        TEXT        NOT NULL,
+          severity    TEXT        NOT NULL,
+          title       TEXT        NOT NULL,
+          detail      TEXT        NOT NULL,
+          station_id  TEXT,
+          value       REAL,
+          delivered   BOOLEAN     NOT NULL DEFAULT FALSE
+        )
+      `;
+      await db`
+        CREATE INDEX IF NOT EXISTS alerts_raised_at_idx
+        ON alerts (raised_at DESC)
+      `;
     })().catch((e) => {
       schemaReady = null;
       throw e;
@@ -220,6 +237,68 @@ export async function getStationSeries(hours = 24): Promise<StationSeries[]> {
   }
 
   return [...byStation.values()].sort((a, b) => (b.peak || 0) - (a.peak || 0));
+}
+
+export interface DayPoint {
+  day: string;
+  mean: number;
+  peak: number;
+  low: number;
+  /** Stations that contributed to the day. */
+  samples: number;
+}
+
+/**
+ * Daily aggregates over a longer window.
+ *
+ * The hourly series answers "what is happening today"; this answers "is this
+ * worse than last week", which is the question a policy reader asks. Days with
+ * no stored reading are absent rather than interpolated, so a gap in recording
+ * stays visible as a gap.
+ */
+export async function getDailyHistory(days = 30): Promise<DayPoint[]> {
+  const db = client();
+  if (!db) return [];
+  await ensureSchema(db);
+
+  const rows = await db<
+    { day: Date; mean: number; peak: number; low: number; samples: number }[]
+  >`
+    SELECT
+      date_trunc('day', recorded_at AT TIME ZONE 'Asia/Karachi') AS day,
+      ROUND(AVG(aqi))::int                                       AS mean,
+      MAX(aqi)::int                                              AS peak,
+      MIN(aqi)::int                                              AS low,
+      COUNT(DISTINCT station_id)::int                            AS samples
+    FROM readings
+    WHERE recorded_at >= NOW() - (${days} * INTERVAL '1 day')
+      AND aqi IS NOT NULL
+    GROUP BY day
+    ORDER BY day ASC
+  `;
+
+  return rows.map((r) => ({
+    day: new Date(r.day).toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      timeZone: "Asia/Karachi",
+    }),
+    mean: r.mean,
+    peak: r.peak,
+    low: r.low,
+    samples: r.samples,
+  }));
+}
+
+/**
+ * The pooled client with the schema guaranteed, for callers that run their own
+ * queries — the alert engine does, so it does not duplicate the bootstrap.
+ */
+export async function db(): Promise<postgres.Sql | null> {
+  const c = client();
+  if (!c) return null;
+  await ensureSchema(c);
+  return c;
 }
 
 export function historyEnabled(): boolean {
