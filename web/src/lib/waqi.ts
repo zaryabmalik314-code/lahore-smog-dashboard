@@ -1,4 +1,5 @@
 import { Station, SourceTier, getAQICategory, STALE_AFTER_MINUTES } from "./types";
+import { pm25Concentration, pm10Concentration } from "./aqi-scale";
 
 const WAQI_TOKEN = process.env.WAQI_TOKEN || "";
 
@@ -53,8 +54,11 @@ async function fetchStation(stationId: string): Promise<Station | null> {
     latitude: data.city?.geo?.[0] || 31.5,
     longitude: data.city?.geo?.[1] || 74.3,
     aqi,
+    // iaqi values are AQI sub-indices; the concentrations are derived from them.
     pm25: iaqi.pm25?.v ?? null,
     pm10: iaqi.pm10?.v ?? null,
+    pm25_ugm3: pm25Concentration(iaqi.pm25?.v ?? null),
+    pm10_ugm3: pm10Concentration(iaqi.pm10?.v ?? null),
     no2: iaqi.no2?.v ?? null,
     so2: iaqi.so2?.v ?? null,
     co: iaqi.co?.v ?? null,

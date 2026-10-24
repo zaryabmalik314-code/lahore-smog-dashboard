@@ -117,9 +117,9 @@ export default function StationTable({ stations }: StationTableProps) {
                       <div className="h-full" style={{ width: `${pct}%`, background: mark }} />
                     </div>
                   </td>
-                  <td className="px-5 py-3 text-right"><Value v={station.stale ? null : station.pm25} /></td>
+                  <td className="px-5 py-3 text-right"><Value v={station.stale ? null : station.pm25_ugm3} /></td>
                   <td className="px-5 py-3 text-right hidden sm:table-cell">
-                    <Value v={station.stale ? null : station.pm10} />
+                    <Value v={station.stale ? null : station.pm10_ugm3} />
                   </td>
                   <td className="px-5 py-3 text-right">
                     <span

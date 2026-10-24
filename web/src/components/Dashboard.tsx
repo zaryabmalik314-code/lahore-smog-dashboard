@@ -12,6 +12,8 @@ import DepartmentAnalysis from "./DepartmentAnalysis";
 import ThemeToggle from "./ThemeToggle";
 import Clock from "./Clock";
 import AlertFeed, { type FeedAlert } from "./AlertFeed";
+import ComplianceRecord, { type DayPoint } from "./ComplianceRecord";
+import { checkQuality } from "@/lib/quality";
 import OutlookPanel from "./OutlookPanel";
 import AssessmentPanel from "./AssessmentPanel";
 import AQIHero from "./AQIHero";
@@ -36,7 +38,7 @@ function getSmogAdvisories(data: DashboardData) {
   const advisories: { icon: string; title: string; detail: string; severity: "critical" | "warning" | "info" }[] = [];
   const avg = data.city_avg_aqi;
   const reporting = data.stations.filter(s => !s.stale);
-  const worstPm25 = Math.max(...reporting.map(s => s.pm25 || 0), 0);
+  const worstPm25 = Math.max(...reporting.map(s => s.pm25_ugm3 || 0), 0);
   const borderStation = reporting.find(s => s.name.toLowerCase().includes("wagha") || s.name.toLowerCase().includes("border"));
 
   if (avg > 300) {
@@ -76,8 +78,9 @@ export default function Dashboard() {
     points: TrendPoint[];
     stations: StationSeries[];
     outlook: Outlook | null;
+    days: DayPoint[];
     enabled: boolean;
-  }>({ points: [], stations: [], outlook: null, enabled: false });
+  }>({ points: [], stations: [], outlook: null, days: [], enabled: false });
 
   useEffect(() => {
     const loadAqi = async () => {
@@ -106,10 +109,11 @@ export default function Dashboard() {
           points: body.points || [],
           stations: body.stations || [],
           outlook: body.outlook ?? null,
+          days: body.days || [],
           enabled: Boolean(body.enabled),
         });
       } catch {
-        setTrend({ points: [], stations: [], outlook: null, enabled: false });
+        setTrend({ points: [], stations: [], outlook: null, days: [], enabled: false });
       }
     };
 
@@ -360,8 +364,8 @@ function TierDot({ tier }: { tier: SourceTier }) {
 }
 
 /** Mean over stations that actually report the field, not over all stations. */
-function meanOf(stations: { pm25: number | null }[]): number | null {
-  const vals = stations.map((s) => s.pm25).filter((v): v is number => typeof v === "number");
+function meanOf(stations: { pm25_ugm3: number | null }[]): number | null {
+  const vals = stations.map((s) => s.pm25_ugm3).filter((v): v is number => typeof v === "number");
   if (vals.length === 0) return null;
   return Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
 }
@@ -369,7 +373,7 @@ function meanOf(stations: { pm25: number | null }[]): number | null {
 function OverviewTab({ data, trend, advisory, alerts }: {
   data: DashboardData;
   alerts: FeedAlert[];
-  trend: { points: TrendPoint[]; stations: StationSeries[]; outlook: Outlook | null; enabled: boolean };
+  trend: { points: TrendPoint[]; stations: StationSeries[]; outlook: Outlook | null; days: DayPoint[]; enabled: boolean };
   advisory: ReturnType<typeof getHealthAdvisory>;
 }) {
   // Memoised: the clock re-renders this every second, and a fresh array
@@ -387,6 +391,7 @@ function OverviewTab({ data, trend, advisory, alerts }: {
 
   const outlook = trend.outlook ?? buildOutlook(trend.stations);
   const assessment = assess(data, outlook, trend.points);
+  const qualityFlags = checkQuality(data.stations, trend.stations);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -499,6 +504,53 @@ function OverviewTab({ data, trend, advisory, alerts }: {
       {/* Alerts raised by the scheduled evaluation */}
       <AlertFeed alerts={alerts} />
 
+      {/* The record, and anything that looks like a sensor rather than the air */}
+      <ComplianceRecord days={trend.days} />
+
+      {qualityFlags.length > 0 && (
+        <section className="panel">
+          <div className="px-5 py-3.5" style={{ borderBottom: "1px solid var(--panel-border)" }}>
+            <h3 className="text-sm font-semibold" style={{ color: "var(--ink)" }}>
+              Data quality notes
+            </h3>
+          </div>
+          <ul>
+            {qualityFlags.map((f, i) => (
+              <li
+                key={`${f.station_id}-${f.kind}`}
+                className="px-5 py-3.5 flex items-start gap-3"
+                style={i === 0 ? undefined : { borderTop: "1px solid var(--panel-border)" }}
+              >
+                <span
+                  className="shrink-0 text-[9px] font-bold uppercase tracking-wider px-2 py-1 rounded-full mt-0.5"
+                  style={{
+                    background: "color-mix(in srgb, var(--aqi-unhealthy-sensitive-ink) 16%, transparent)",
+                    color: "var(--aqi-unhealthy-sensitive-ink)",
+                  }}
+                >
+                  {f.kind}
+                </span>
+                <div>
+                  <p className="text-sm font-semibold" style={{ color: "var(--ink)" }}>
+                    {f.station_name}
+                  </p>
+                  <p className="text-xs mt-1 leading-relaxed" style={{ color: "var(--ink-2)" }}>
+                    {f.detail}
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ul>
+          <div className="px-5 py-3" style={{ borderTop: "1px solid var(--panel-border)", background: "var(--paper-sunk)" }}>
+            <p className="text-[11px] leading-relaxed" style={{ color: "var(--ink-3)" }}>
+              Flagged readings are still counted. Two of these stations are low-cost citizen
+              sensors, which drift and stick; quietly dropping a reading a department can see on
+              another site would be worse than showing it with this note.
+            </p>
+          </div>
+        </section>
+      )}
+
       {/* Per-station records */}
       <StationDetail stations={trend.stations} />
 
@@ -511,7 +563,7 @@ function OverviewTab({ data, trend, advisory, alerts }: {
 function DepartmentTab({ type, data, trend }: {
   type: string;
   data: DashboardData;
-  trend: { points: TrendPoint[]; stations: StationSeries[]; outlook: Outlook | null; enabled: boolean };
+  trend: { points: TrendPoint[]; stations: StationSeries[]; outlook: Outlook | null; days: DayPoint[]; enabled: boolean };
 }) {
   const outlook = trend.outlook ?? buildOutlook(trend.stations);
   const deptFindings = findingsFor(assess(data, outlook, trend.points), type);
@@ -539,8 +591,8 @@ function DepartmentTab({ type, data, trend }: {
       description: "Particulate load across the network during the Rabi season. Crop-yield and burn-attribution conclusions require ground survey and satellite fire data, which this network does not provide.",
       metrics: [
         { label: "Particulate Load", value: data.city_avg_aqi > 200 ? "SEVERE" : data.city_avg_aqi > 150 ? "HIGH" : "MODERATE", detail: "Banded from network AQI. Yield impact requires ground survey to confirm.", severity: data.city_avg_aqi > 200 ? "critical" : "warning", derived: true },
-        { label: "PM10 Average", value: (() => { const v = reporting.map(s => s.pm10).filter((x): x is number => typeof x === "number"); return v.length ? `${Math.round(v.reduce((a, b) => a + b, 0) / v.length)}` : "—"; })(), detail: "µg/m³ — coarse particulates, the dust and crop-burn fraction" },
-        { label: "PM10 Spike Stations", value: `${reporting.filter(s => (s.pm10 || 0) > 200).length} of ${reporting.length}`, detail: "Stations above 200 µg/m³ PM10. Burn attribution needs satellite fire data.", severity: reporting.filter(s => (s.pm10 || 0) > 200).length > 1 ? "critical" : "info", derived: true },
+        { label: "PM10 Average", value: (() => { const v = reporting.map(s => s.pm10_ugm3).filter((x): x is number => typeof x === "number"); return v.length ? `${Math.round(v.reduce((a, b) => a + b, 0) / v.length)}` : "—"; })(), detail: "µg/m³ — coarse particulates, the dust and crop-burn fraction" },
+        { label: "PM10 Spike Stations", value: `${reporting.filter(s => (s.pm10_ugm3 || 0) > 200).length} of ${reporting.length}`, detail: "Stations above 200 µg/m³ PM10. Burn attribution needs satellite fire data.", severity: reporting.filter(s => (s.pm10 || 0) > 200).length > 1 ? "critical" : "info", derived: true },
         { label: "Wagha Border AQI", value: `${reporting.find(s => s.name.toLowerCase().includes("wagha") || s.name.toLowerCase().includes("border"))?.aqi ?? "—"}`, detail: "Easternmost station — proximity indicator only, not an attribution" },
       ],
     },
@@ -551,7 +603,7 @@ function DepartmentTab({ type, data, trend }: {
       metrics: [
         { label: "NEQS Status", value: pm25Avg !== null && pm25Avg > 35 ? "ABOVE LIMIT" : "WITHIN LIMIT", detail: "Indicative screening against NEQS PM2.5 24-hour limit of 35 µg/m³", severity: pm25Avg !== null && pm25Avg > 35 ? "critical" : "info", derived: true },
         { label: "Dominant Pollutant", value: "PM2.5", detail: "Reported by WAQI as the dominant pollutant at these stations" },
-        { label: "Above NEQS PM2.5", value: `${reporting.filter(s => (s.pm25 || 0) > 35).length} of ${reporting.length}`, detail: "Reporting stations above 35 µg/m³", severity: "warning" },
+        { label: "Above NEQS PM2.5", value: `${reporting.filter(s => (s.pm25_ugm3 || 0) > 35).length} of ${reporting.length}`, detail: "Reporting stations above 35 µg/m³", severity: "warning" },
         { label: "Avg PM2.5", value: pm25Avg !== null ? `${pm25Avg} µg/m³` : "—", detail: "Network mean against the NEQS limit of 35 µg/m³" },
       ],
     },

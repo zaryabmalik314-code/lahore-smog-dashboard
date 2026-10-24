@@ -8,8 +8,8 @@ interface PollutantBreakdownProps {
 }
 
 const POLLUTANTS = [
-  { key: "pm25" as const, name: "PM2.5", limit: 15, unit: "µg/m³", who: "24-hour", color: "var(--aqi-unhealthy)" },
-  { key: "pm10" as const, name: "PM10", limit: 45, unit: "µg/m³", who: "24-hour", color: "var(--aqi-unhealthy-sensitive)" },
+  { key: "pm25_ugm3" as const, name: "PM2.5", limit: 15, unit: "µg/m³", who: "24-hour", color: "var(--aqi-unhealthy)" },
+  { key: "pm10_ugm3" as const, name: "PM10", limit: 45, unit: "µg/m³", who: "24-hour", color: "var(--aqi-unhealthy-sensitive)" },
   { key: "no2" as const, name: "NO₂", limit: 25, unit: "µg/m³", who: "annual", color: "var(--aqi-moderate-ink)" },
   { key: "so2" as const, name: "SO₂", limit: 40, unit: "µg/m³", who: "24-hour", color: "var(--aqi-very-unhealthy)" },
   { key: "co" as const, name: "CO", limit: 4, unit: "mg/m³", who: "24-hour", color: "var(--tier-citizen)" },

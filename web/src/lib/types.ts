@@ -6,8 +6,14 @@ export interface Station {
   latitude: number;
   longitude: number;
   aqi: number | null;
+  /** PM2.5 AQI sub-index as the feed reports it — an index, not a concentration. */
   pm25: number | null;
+  /** PM10 AQI sub-index. */
   pm10: number | null;
+  /** PM2.5 in µg/m³, derived by inverting the EPA AQI. */
+  pm25_ugm3: number | null;
+  /** PM10 in µg/m³, derived by inverting the EPA AQI. */
+  pm10_ugm3: number | null;
   no2: number | null;
   so2: number | null;
   co: number | null;

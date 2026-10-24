@@ -73,8 +73,8 @@ export function assess(
   const basis: string[] = [];
 
   const avg = data.city_avg_aqi;
-  const pm25Values = reporting.map((s) => s.pm25).filter((v): v is number => typeof v === "number");
-  const pm10Values = reporting.map((s) => s.pm10).filter((v): v is number => typeof v === "number");
+  const pm25Values = reporting.map((s) => s.pm25_ugm3).filter((v): v is number => typeof v === "number");
+  const pm10Values = reporting.map((s) => s.pm10_ugm3).filter((v): v is number => typeof v === "number");
   const pm25Avg = mean(pm25Values);
   const pm10Avg = mean(pm10Values);
 
@@ -250,7 +250,7 @@ export function assess(
 
   // ── Regulatory exceedance ──────────────────────────────────────────────
   if (pm25Avg !== null) {
-    const overNeqs = reporting.filter((s) => (s.pm25 ?? 0) > NEQS_PM25).length;
+    const overNeqs = reporting.filter((s) => (s.pm25_ugm3 ?? 0) > NEQS_PM25).length;
     if (overNeqs > 0) {
       findings.push({
         id: "neqs",

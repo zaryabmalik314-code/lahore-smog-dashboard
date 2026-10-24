@@ -345,8 +345,8 @@ export default function AQIMap({ stations }: AQIMapProps) {
             <span style="font-size: 11px; color: ${ink}; font-weight: 600;">${AQI_LABELS[station.category]}</span>
           </div>
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px; font-size: 11px;">
-            ${cell("PM2.5", station.pm25 != null ? `${station.pm25} µg/m³` : "no sensor")}
-            ${cell("PM10", station.pm10 != null ? `${station.pm10} µg/m³` : "no sensor")}
+            ${cell("PM2.5", station.pm25_ugm3 != null ? `${station.pm25_ugm3} µg/m³` : "no sensor")}
+            ${cell("PM10", station.pm10_ugm3 != null ? `${station.pm10_ugm3} µg/m³` : "no sensor")}
           </div>
           <div style="margin-top: 8px; font-size: 10px; color: var(--ink-3);">${station.attribution}</div>
         </div>

@@ -89,8 +89,8 @@ export default function DepartmentAnalysis({ type, stations, networkMean }: Prop
               const border = i === 0 ? undefined : { borderTop: "1px solid var(--rule)" };
               const name = s.name.replace(/, Pakistan$/, "");
 
-              const pm25 = s.pm25;
-              const pm10 = s.pm10;
+              const pm25 = s.pm25_ugm3;
+              const pm10 = s.pm10_ugm3;
               const ratio = pm25 && pm10 ? pm10 / pm25 : null;
               const dev = (s.aqi || 0) - networkMean;
 
